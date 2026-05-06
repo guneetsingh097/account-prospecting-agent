@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Prospecting Agent — Proseware</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%234f8cff'/%3E%3Cstop offset='100%25' stop-color='%237c3aed'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ccircle cx='32' cy='32' r='18' fill='none' stroke='white' stroke-width='2.5' opacity='0.5'/%3E%3Ccircle cx='32' cy='32' r='11' fill='none' stroke='white' stroke-width='2.5' opacity='0.7'/%3E%3Ccircle cx='32' cy='32' r='4' fill='white'/%3E%3Cline x1='32' y1='10' x2='32' y2='18' stroke='white' stroke-width='2' opacity='0.6'/%3E%3Cline x1='32' y1='46' x2='32' y2='54' stroke='white' stroke-width='2' opacity='0.6'/%3E%3Cline x1='10' y1='32' x2='18' y2='32' stroke='white' stroke-width='2' opacity='0.6'/%3E%3Cline x1='46' y1='32' x2='54' y2='32' stroke='white' stroke-width='2' opacity='0.6'/%3E%3C/svg%3E">
+    <style>
+        :root {
+            --bg: #eef0f4;
+            --surface: #ffffff;
+            --surface2: #f5f6f8;
+            --border: #dde0e6;
+            --text: #1a1d27;
+            --text-dim: #5f6b7a;
+            --accent: #5b4cff;
+            --accent-glow: rgba(91, 76, 255, 0.12);
+            --green: #16a34a;
+            --yellow: #ca8a04;
+            --red: #dc2626;
+            --blue: #2563eb;
+            --orange: #ea580c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .header-logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .header-subtitle {
+            color: var(--text-dim);
+            font-size: 14px;
+        }
+        .header-badge {
+            margin-left: auto;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .lane-badge {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .lane-web { border-color: var(--blue); color: var(--blue); }
+        .lane-cloud { border-color: var(--orange); color: var(--orange); }
+        .lane-local { border-color: var(--green); color: var(--green); }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 32px;
+        }
+
+        /* Search Section */
+        .search-section {
+            text-align: center;
+            padding: 60px 0 40px;
+        }
+        .search-section h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .search-section p {
+            color: var(--text-dim);
+            font-size: 15px;
+            margin-bottom: 32px;
+        }
+        .search-box {
+            display: flex;
+            gap: 12px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .search-input {
+            flex: 1;
+            padding: 14px 20px;
+            font-size: 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        .search-input::placeholder { color: var(--text-dim); }
+        .search-btn {
+            padding: 14px 28px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+        .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+        .search-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .suggestions {
+            margin-top: 16px;
+            color: var(--text-dim);
+            font-size: 15px;
+        }
+        .suggestions span {
+            cursor: pointer;
+            color: var(--accent);
+            margin: 0 6px;
+            transition: opacity 0.2s;
+        }
+        .suggestions span:hover { opacity: 0.7; }
+        .drop-zone {
+            margin-top: 24px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.2s;
+            cursor: pointer;
+            position: relative;
+        }
+        .drop-zone.dragover {
+            border-color: var(--green);
+            background: rgba(74, 222, 128, 0.05);
+            box-shadow: 0 0 20px rgba(74, 222, 128, 0.1);
+        }
+        .drop-zone.has-file {
+            border-color: var(--green);
+            border-style: solid;
+        }
+        .drop-icon { font-size: 24px; margin-bottom: 4px; }
+        .drop-text { font-size: 13px; color: var(--text-dim); }
+        .drop-subtext { font-size: 11px; color: var(--text-dim); opacity: 0.6; margin-top: 4px; }
+        .uploaded-file-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(74, 222, 128, 0.1);
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--green);
+            margin-top: 8px;
+        }
+
+        /* Progress Section */
+        .progress-section {
+            display: none;
+            margin-top: 20px;
+        }
+        .phase {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 16px;
+            transition: border-color 0.3s;
+        }
+        .phase.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+        .phase.complete {
+            border-color: var(--green);
+            opacity: 0.85;
+        }
+        .phase-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .phase-icon {
+            font-size: 20px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: var(--surface2);
+        }
+        .phase-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+        .phase-lane {
+            margin-left: auto;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        .phase-lane.web { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
+        .phase-lane.cloud { background: rgba(251, 146, 60, 0.15); color: var(--orange); }
+        .phase-lane.local { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+
+        .phase-body {
+            font-size: 13px;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+
+        /* Counters */
+        .counters {
+            display: flex;
+            gap: 20px;
+            margin: 12px 0;
+            flex-wrap: wrap;
+        }
+        .counter {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .counter-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
+        }
+        .counter-label {
+            font-size: 11px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Signals */
+        .signal-list {
+            max-height: 180px;
+            overflow-y: auto;
+            margin-top: 8px;
+        }
+        .signal-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 6px 0;
+            font-size: 12px;
+            border-bottom: 1px solid var(--border);
+            animation: fadeIn 0.3s ease;
+        }
+        .signal-tag {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .signal-tag.regulatory_pressure { background: rgba(248, 113, 113, 0.2); color: var(--red); }
+        .signal-tag.executive_commitment { background: rgba(96, 165, 250, 0.2); color: var(--blue); }
+        .signal-tag.measurement_gap { background: rgba(251, 146, 60, 0.2); color: var(--orange); }
+        .signal-tag.budget_signal { background: rgba(74, 222, 128, 0.2); color: var(--green); }
+        .signal-tag.budget_availability { background: rgba(74, 222, 128, 0.2); color: var(--green); }
+        .signal-tag.urgency_timing { background: rgba(251, 191, 36, 0.2); color: var(--yellow); }
+        .signal-tag.deal_size_indicator { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+        .signal-tag.deal_size_potential { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+        .signal-tag.risk_factor { background: rgba(248, 113, 113, 0.3); color: var(--red); }
+        .signal-quote { color: var(--text-dim); font-style: italic; }
+        .signal-source { color: var(--text-dim); opacity: 0.6; font-size: 10px; }
+
+        /* Fit Scorecard (inline within evaluation phase) */
+        .fit-card.HIGH, .fit-card.MEDIUM, .fit-card.LOW { /* legacy compat */ }
+
+        .fit-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .fit-level {
+            font-size: 32px;
+            font-weight: 800;
+        }
+        .fit-level.HIGH { color: var(--green); }
+        .fit-level.MEDIUM { color: var(--yellow); }
+        .fit-level.LOW { color: var(--red); }
+        .fit-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .fit-company {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .fit-score {
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+        .fit-acv {
+            margin-left: auto;
+            text-align: right;
+        }
+        .fit-acv-label {
+            font-size: 11px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+        .fit-acv-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--green);
+        }
+
+        /* Dimension bars */
+        .dimensions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin: 20px 0;
+        }
+        .dim-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .dim-name {
+            font-size: 12px;
+            color: var(--text-dim);
+            width: 130px;
+            white-space: nowrap;
+        }
+        .dim-bar {
+            flex: 1;
+            height: 6px;
+            background: var(--surface2);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .dim-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+        .dim-fill.positive { background: var(--green); }
+        .dim-fill.neutral { background: var(--text-dim); }
+        .dim-fill.negative { background: var(--red); }
+        .dim-score-val {
+            font-size: 12px;
+            font-weight: 600;
+            width: 24px;
+            text-align: right;
+        }
+
+        /* Narrative */
+        .narrative {
+            margin: 20px 0;
+            padding: 16px 20px;
+            background: var(--surface2);
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.7;
+            min-height: 60px;
+        }
+        .narrative .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 16px;
+            background: var(--accent);
+            animation: blink 0.8s infinite;
+            vertical-align: middle;
+            margin-left: 2px;
+        }
+
+        /* WorkIQ signals */
+        .workiq-signals {
+            margin: 16px 0;
+            padding: 12px 16px;
+            background: rgba(251, 146, 60, 0.05);
+            border: 1px solid rgba(251, 146, 60, 0.2);
+            border-radius: 8px;
+        }
+        .workiq-signal-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            font-size: 13px;
+        }
+        .workiq-signal-item .icon { font-size: 16px; }
+        .workiq-signal-item .date { color: var(--text-dim); font-size: 11px; margin-left: auto; }
+
+        /* CRM Button */
+        .crm-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .crm-btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.1s;
+        }
+        .crm-btn:hover { transform: scale(1.02); }
+        .crm-btn.primary {
+            background: var(--green);
+            color: #000;
+        }
+        .crm-btn.secondary {
+            background: var(--surface2);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .crm-success {
+            display: none;
+            padding: 16px 20px;
+            background: rgba(74, 222, 128, 0.1);
+            border: 1px solid var(--green);
+            border-radius: 8px;
+            margin-top: 16px;
+            color: var(--green);
+            font-size: 14px;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulsing { animation: pulse 1.5s infinite; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--surface); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        /* Add Context Drawer */
+        .add-context-drawer {
+            margin-top: 12px;
+            border-top: 1px solid var(--border);
+            padding-top: 10px;
+        }
+        .drawer-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--accent);
+            font-weight: 500;
+            padding: 4px 0;
+        }
+        .drawer-toggle:hover { opacity: 0.8; }
+        .drawer-arrow { transition: transform 0.2s; }
+        .drawer-arrow.open { transform: rotate(90deg); }
+        .drawer-content { margin-top: 10px; }
+        .drawer-tab {
+            padding: 5px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-dim);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .drawer-tab.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        /* Dimension Detail Modal */
+        .dim-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .dim-overlay.visible { display: flex; }
+        .dim-detail-card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+            position: relative;
+        }
+        .dim-detail-card .close-btn {
+            position: absolute;
+            top: 12px; right: 16px;
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--text-dim);
+            background: none;
+            border: none;
+        }
+        .dim-detail-card h3 {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .dim-detail-card .dim-score-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .dim-detail-card .dim-score-badge.positive { background: rgba(22,163,74,0.1); color: var(--green); }
+        .dim-detail-card .dim-score-badge.neutral { background: rgba(95,107,122,0.1); color: var(--text-dim); }
+        .dim-detail-card .dim-score-badge.negative { background: rgba(220,38,38,0.1); color: var(--red); }
+        .dim-detail-card .dim-evidence {
+            font-size: 13px;
+            line-height: 1.7;
+            color: var(--text);
+            margin-top: 8px;
+        }
+
+        /* Clickable dimensions */
+        .dim-name { cursor: pointer; }
+        .dim-name:hover { color: var(--accent); }
+
+        /* Autocomplete dropdown */
+        .autocomplete-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 100;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        }
+        .autocomplete-dropdown.visible { display: block; }
+        .ac-item {
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+        .ac-item:last-child { border-bottom: none; }
+        .ac-item:hover, .ac-item.selected {
+            background: var(--surface2);
+        }
+        .ac-ticker {
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--accent);
+            width: 60px;
+            flex-shrink: 0;
+        }
+        .ac-name {
+            font-size: 14px;
+            color: var(--text);
+            flex: 1;
+        }
+        .ac-industry {
+            font-size: 11px;
+            color: var(--text-dim);
+            text-align: right;
+        }
+        .ac-prefetch-indicator {
+            font-size: 10px;
+            color: var(--green);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .ac-prefetch-indicator.active { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-logo" onclick="resetSearch()" style="cursor:pointer;" title="Home">⚡ Proseware</div>
+        <div class="header-subtitle">Account Prospecting Agent</div>
+        <div class="header-badge">
+            <div class="lane-badge lane-web">🌐 Web</div>
+            <div class="lane-badge lane-cloud">☁️ Cloud</div>
+            <div class="lane-badge lane-local">💻 On-Device</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Search -->
+        <div class="search-section" id="searchSection">
+            <h1>Account Prospecting Agent</h1>
+            <p style="max-width: 560px; margin: 0 auto 24px; line-height: 1.8; font-size: 14px; color: var(--text-dim);">
+                Evaluate whether a company is a good fit for Proseware's sustainability platform.
+                The agent collects public data, analyzes it with on-device AI, and scores fit
+                — all locally on your Copilot+ PC.
+            </p>
+            <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 28px; font-size: 12px; color: var(--text-dim);">
+                <span>🌐 Web data collection</span>
+                <span>💻 NPU signal extraction</span>
+                <span>💻 SLM fit evaluation</span>
+                <span>☁️ Internal signal enrichment</span>
+            </div>
+            <div class="search-box" style="position: relative;">
+                <input type="text" class="search-input" id="companyInput"
+                       placeholder="e.g. Adatum Corporation, Fabrikam, Northwind Traders..." autocomplete="off"
+                       oninput="onSearchInput(this.value)" onkeydown="onSearchKeydown(event)">
+                <button class="search-btn" id="researchBtn" onclick="startResearch()">Research</button>
+                <!-- Autocomplete dropdown -->
+                <div class="autocomplete-dropdown" id="autocompleteDropdown"></div>
+            </div>
+            <div class="suggestions">
+                Try: <span onclick="setCompany('Adatum Corporation')">Adatum Corporation</span> |
+                <span onclick="setCompany('Fabrikam, Inc.')">Fabrikam, Inc.</span> |
+                <span onclick="setCompany('Trey Research')">Trey Research</span> |
+                <span onclick="setCompany('Northwind Traders')">Northwind Traders</span>
+            </div>
+
+            <div id="prefetchStatus" style="font-size: 11px; color: var(--text-dim); margin-top: 8px; min-height: 16px;"></div>
+        </div>
+
+        <!-- Progress Phases -->
+        <div class="progress-section" id="progressSection">
+
+            <!-- Phase 1: Collection -->
+            <div class="phase" id="phaseCollection">
+                <div class="phase-header">
+                    <div class="phase-icon">🌐</div>
+                    <div class="phase-title">Collecting Public Data</div>
+                    <div class="phase-lane web">WEB COLLECTION</div>
+                </div>
+                <div class="phase-body">
+                    <div class="counters">
+                        <div class="counter">
+                            <div class="counter-value" id="counterSources">0</div>
+                            <div class="counter-label">Sources</div>
+                        </div>
+                        <div class="counter">
+                            <div class="counter-value" id="counterPages">0</div>
+                            <div class="counter-label">Pages</div>
+                        </div>
+                        <div class="counter">
+                            <div class="counter-value" id="counterQueries">0</div>
+                            <div class="counter-label">Queries</div>
+                        </div>
+                    </div>
+                    <div id="collectionLog" style="font-size: 12px; color: var(--text-dim); max-height: 80px; overflow-y: auto;"></div>
+                </div>
+            </div>
+
+            <!-- Phase 2: NPU Analysis -->
+            <div class="phase" id="phaseAnalysis">
+                <div class="phase-header">
+                    <div class="phase-icon">💻</div>
+                    <div class="phase-title">Local AI Analysis</div>
+                    <div class="phase-lane local">ON-DEVICE (NPU)</div>
+                </div>
+                <div class="phase-body">
+                    <div class="counters">
+                        <div class="counter">
+                            <div class="counter-value" id="counterDocs">0</div>
+                            <div class="counter-label">Docs Analyzed</div>
+                        </div>
+                        <div class="counter">
+                            <div class="counter-value" id="counterSignals">0</div>
+                            <div class="counter-label">Signals Found</div>
+                        </div>
+                    </div>
+                    <div class="signal-list" id="signalList"></div>
+
+                    <!-- Add Context Drawer -->
+                    <div class="add-context-drawer" id="addContextDrawer">
+                        <div class="drawer-toggle" onclick="toggleContextDrawer()">
+                            <span>＋ Add additional context for analysis</span>
+                            <span class="drawer-arrow" id="drawerArrow">▸</span>
+                        </div>
+                        <div class="drawer-content" id="drawerContent" style="display:none;">
+                            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                <button class="drawer-tab active" id="tabDoc" onclick="switchDrawerTab('doc')">📎 Document</button>
+                                <button class="drawer-tab" id="tabNotes" onclick="switchDrawerTab('notes')">📝 Notes</button>
+                                <button class="drawer-tab" id="tabUrl" onclick="switchDrawerTab('url')">🔗 URL</button>
+                            </div>
+                            <div id="drawerDoc">
+                                <div id="dropZone" class="drop-zone" style="margin: 0; padding: 14px;">
+                                    <div class="drop-zone-content">
+                                        <div class="drop-icon" style="font-size: 18px;">📎</div>
+                                        <div class="drop-text">Drop a file — parsed locally, never sent to cloud</div>
+                                        <div class="drop-subtext">PDF, TXT, MD, CSV</div>
+                                    </div>
+                                    <div id="uploadedFileInfo" class="uploaded-file-info" style="display:none;"></div>
+                                </div>
+                            </div>
+                            <div id="drawerNotes" style="display:none;">
+                                <textarea id="contextNotes" placeholder="Paste notes, meeting takeaways, or context you'd like the AI to consider..." style="width:100%; height: 80px; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; resize: vertical; font-family: inherit;"></textarea>
+                                <button onclick="submitNotes()" style="margin-top: 8px; padding: 6px 14px; border-radius: 6px; border: none; background: var(--accent); color: white; font-size: 12px; cursor: pointer;">Add to Analysis</button>
+                            </div>
+                            <div id="drawerUrl" style="display:none;">
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="text" id="contextUrl" placeholder="https://..." style="flex:1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px;">
+                                    <button onclick="submitUrl()" style="padding: 6px 14px; border-radius: 6px; border: none; background: var(--accent); color: white; font-size: 12px; cursor: pointer;">Fetch & Analyze</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase 3: WorkIQ -->
+            <div class="phase" id="phaseWorkIQ">
+                <div class="phase-header">
+                    <div class="phase-icon">☁️</div>
+                    <div class="phase-title">Internal Signals (WorkIQ)</div>
+                    <div class="phase-lane cloud">M365 COPILOT</div>
+                </div>
+                <div class="phase-body">
+                    <div id="workiqContent" style="font-size: 13px;">Querying internal systems...</div>
+                </div>
+            </div>
+
+            <!-- Phase 4: Fit Evaluation + Scorecard (combined) -->
+            <div class="phase" id="phaseEvaluation">
+                <div class="phase-header">
+                    <div class="phase-icon">💻</div>
+                    <div class="phase-title">Fit Evaluation & Scorecard</div>
+                    <div class="phase-lane local">ON-DEVICE (SLM)</div>
+                </div>
+                <div class="phase-body">
+                    <div id="evalContent" style="font-size: 13px;">Waiting for analysis...</div>
+                    <!-- Inline scorecard grows here as dimensions are scored -->
+                    <div id="inlineScorecard" style="display:none; margin-top: 16px;">
+                        <div class="fit-header" id="inlineFitHeader" style="display:none;">
+                            <div class="fit-level" id="fitLevel">—</div>
+                            <div class="fit-meta">
+                                <div class="fit-company" id="fitCompany">—</div>
+                                <div class="fit-score" id="fitScore">—</div>
+                            </div>
+                            <div class="fit-acv">
+                                <div class="fit-acv-label">Est. ACV</div>
+                                <div class="fit-acv-value" id="fitACV">—</div>
+                            </div>
+                        </div>
+                        <div class="dimensions" id="dimGrid"></div>
+                        <div class="workiq-signals" id="workiqCard" style="display:none;">
+                            <div style="font-size: 12px; font-weight: 600; color: var(--orange); margin-bottom: 8px;">☁️ Internal Engagement (via WorkIQ)</div>
+                            <div id="workiqSignalsList"></div>
+                        </div>
+                        <div class="narrative" id="narrative"><span class="cursor"></span></div>
+                        <div class="crm-actions" id="crmActions" style="display:none;">
+                            <button class="crm-btn primary" onclick="pushToCRM()">✓ Approve → Add to Pipeline</button>
+                            <button class="crm-btn secondary" onclick="dismiss()">✗ Dismiss</button>
+                            <button class="crm-btn secondary" onclick="resetSearch()">↻ Research Another</button>
+                        </div>
+                        <div class="crm-success" id="crmSuccess"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Compute Summary -->
+            <div class="phase" id="phaseMetrics" style="display:none;">
+                <div class="phase-header">
+                    <div class="phase-icon">📊</div>
+                    <div class="phase-title">AI Compute Summary</div>
+                    <div class="phase-lane local">HYBRID AI METRICS</div>
+                </div>
+                <div class="phase-body">
+                    <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 12px;">
+                        Every token processed locally = zero cloud cost, zero network latency, full data privacy.
+                    </div>
+                    <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 16px 0;">
+                        <div class="metric-card" style="background: var(--surface2); border-radius: 10px; padding: 16px; text-align: center; border: 1px solid var(--border);">
+                            <div style="font-size: 24px; font-weight: 700; color: var(--green);" id="metricTokens">0</div>
+                            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-top: 4px;">Tokens Processed Locally</div>
+                        </div>
+                        <div class="metric-card" style="background: var(--surface2); border-radius: 10px; padding: 16px; text-align: center; border: 1px solid var(--border);">
+                            <div style="font-size: 24px; font-weight: 700; color: var(--green);" id="metricCostSaved">$0.00</div>
+                            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-top: 4px;">Est. Cloud Cost Saved</div>
+                        </div>
+                        <div class="metric-card" style="background: var(--surface2); border-radius: 10px; padding: 16px; text-align: center; border: 1px solid var(--border);">
+                            <div style="font-size: 24px; font-weight: 700; color: var(--accent);" id="metricInferences">0</div>
+                            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-top: 4px;">Local AI Inferences</div>
+                        </div>
+                        <div class="metric-card" style="background: var(--surface2); border-radius: 10px; padding: 16px; text-align: center; border: 1px solid var(--border);">
+                            <div style="font-size: 24px; font-weight: 700; color: var(--green);" id="metricOnDevice">0%</div>
+                            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-top: 4px;">Processed On-Device</div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+                        <div style="background: var(--surface2); border-radius: 8px; padding: 12px; border: 1px solid var(--border);">
+                            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px;">Processing Breakdown</div>
+                            <div style="font-size: 13px;" id="metricBreakdown">
+                                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border);">
+                                    <span>💻 NPU Classification</span> <span id="metricNPU" style="color: var(--green);">0 calls</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border);">
+                                    <span>💻 SLM Evaluation</span> <span id="metricSLM" style="color: var(--green);">0 calls</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border);">
+                                    <span>💻 Document Analysis</span> <span id="metricDocs" style="color: var(--green);">0 docs</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                                    <span>☁️ Cloud Queries</span> <span id="metricCloud" style="color: var(--orange);">0 calls</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="background: var(--surface2); border-radius: 8px; padding: 12px; border: 1px solid var(--border);">
+                            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px;">Fleet-Scale Projection</div>
+                            <div style="font-size: 13px; color: var(--text-dim); line-height: 1.8;">
+                                <div>1,000 sellers × 100 prospects/day × 260 days</div>
+                                <div style="font-size: 20px; font-weight: 700; color: var(--green); margin: 4px 0;" id="metricProjection">$0 saved/year</div>
+                                <div style="font-size: 11px;">At $0 incremental inference cost per device</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dimension Detail Modal -->
+    <div class="dim-overlay" id="dimOverlay" onclick="closeDimDetail(event)">
+        <div class="dim-detail-card" onclick="event.stopPropagation()">
+            <button class="close-btn" onclick="closeDimDetail()">✕</button>
+            <h3 id="dimDetailTitle">—</h3>
+            <div class="dim-score-badge" id="dimDetailBadge">—</div>
+            <div class="dim-evidence" id="dimDetailEvidence">Loading analysis...</div>
+        </div>
+    </div>
+
+    <script>
+        let currentCompany = '';
+        let currentUploadId = null;
+        let workiqSignals = [];
+        let acSelectedIndex = -1;
+        let acResults = [];
+        let searchDebounce = null;
+        let prefetchedCompany = null;
+        let dimensionData = {}; // stores {name, score, evidence} for detail modal
+        let computeMetrics = {
+            tokensLocal: 0,
+            tokensCloud: 0,
+            localInferences: 0,
+            cloudInferences: 0,
+            npuCalls: 0,
+            slmCalls: 0,
+            docsAnalyzed: 0
+        };
+
+        // --- Drawer functions ---
+        function toggleContextDrawer() {
+            const content = document.getElementById('drawerContent');
+            const arrow = document.getElementById('drawerArrow');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                arrow.classList.add('open');
+            } else {
+                content.style.display = 'none';
+                arrow.classList.remove('open');
+            }
+        }
+        function switchDrawerTab(tab) {
+            document.getElementById('drawerDoc').style.display = tab === 'doc' ? 'block' : 'none';
+            document.getElementById('drawerNotes').style.display = tab === 'notes' ? 'block' : 'none';
+            document.getElementById('drawerUrl').style.display = tab === 'url' ? 'block' : 'none';
+            document.querySelectorAll('.drawer-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+        }
+        function submitNotes() {
+            const notes = document.getElementById('contextNotes').value.trim();
+            if (!notes) return;
+            document.getElementById('contextNotes').value = '';
+            document.getElementById('contextNotes').placeholder = '⏳ Processing with local AI...';
+            runReanalysis(notes, 'notes');
+        }
+        function submitUrl() {
+            const url = document.getElementById('contextUrl').value.trim();
+            if (!url) return;
+            document.getElementById('contextUrl').value = '';
+            document.getElementById('contextUrl').placeholder = '⏳ Fetching & analyzing locally...';
+            runReanalysis(url, 'url');
+        }
+
+        function runReanalysis(context, contextType) {
+            // Clear existing scorecard and show re-analysis state
+            document.getElementById('dimGrid').innerHTML = '';
+            document.getElementById('evalContent').textContent = 'Re-analyzing with new context...';
+            dimensionData = {};
+
+            fetch('/api/reanalyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({company_name: currentCompany, context: context, context_type: contextType})
+            }).then(r => {
+                const reader = r.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                function pump() {
+                    return reader.read().then(({done, value}) => {
+                        if (done) {
+                            document.getElementById('contextNotes').placeholder = 'Paste notes, meeting takeaways, or context...';
+                            document.getElementById('contextUrl').placeholder = 'https://...';
+                            return;
+                        }
+                        buffer += decoder.decode(value, {stream: true});
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop();
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const eventLine = lines[lines.indexOf(line) - 1] || '';
+                                const eventType = eventLine.replace('event: ', '');
+                                const data = JSON.parse(line.slice(6));
+                                handleReanalysisEvent(eventType, data);
+                            }
+                        }
+                        return pump();
+                    });
+                }
+                return pump();
+            });
+        }
+
+        function handleReanalysisEvent(eventType, data) {
+            if (eventType === 'dimension_scored') {
+                const d = data;
+                document.getElementById('evalContent').textContent =
+                    `Scored: ${d.dimension_name} → ${d.score}/2 (running total: ${d.running_total})`;
+                dimensionData[d.dimension_name] = {
+                    name: d.dimension_name,
+                    score: d.score,
+                    evidence: d.evidence || 'Score based on additional context provided.'
+                };
+                const grid = document.getElementById('dimGrid');
+                const pct = Math.max(0, (d.score + 1) / 3 * 100);
+                const cls = d.score > 0 ? 'positive' : d.score < 0 ? 'negative' : 'neutral';
+                const safeName = d.dimension_name.replace(/'/g, "\\'");
+                grid.innerHTML += `
+                    <div class="dim-item" style="animation: fadeIn 0.3s ease">
+                        <div class="dim-name" onclick="showDimDetail('${safeName}')" title="Click for details">${d.dimension_name}</div>
+                        <div class="dim-bar"><div class="dim-fill ${cls}" style="width:${pct}%"></div></div>
+                        <div class="dim-score-val">${d.score > 0 ? '+' : ''}${d.score}</div>
+                    </div>
+                `;
+            } else if (eventType === 'narrative_complete') {
+                const narrative = data.narrative || data.text || '';
+                document.getElementById('narrative').innerHTML = narrative.replace(/\n/g, '<br>');
+            } else if (eventType === 'reanalyze_complete') {
+                document.getElementById('evalContent').textContent = `✓ Re-analysis complete (${data.processing_time_ms}ms local)`;
+            }
+        }
+
+        // --- Dimension Detail Modal ---
+        function showDimDetail(dimName) {
+            const data = dimensionData[dimName];
+            if (!data) return;
+            document.getElementById('dimDetailTitle').textContent = data.name;
+            const cls = data.score > 0 ? 'positive' : data.score < 0 ? 'negative' : 'neutral';
+            const badge = document.getElementById('dimDetailBadge');
+            badge.className = 'dim-score-badge ' + cls;
+            badge.textContent = `Score: ${data.score > 0 ? '+' : ''}${data.score}/2`;
+            document.getElementById('dimDetailEvidence').innerHTML = data.evidence || 'No detailed evidence available for this dimension.';
+            document.getElementById('dimOverlay').classList.add('visible');
+        }
+        function closeDimDetail(e) {
+            if (!e || e.target === document.getElementById('dimOverlay')) {
+                document.getElementById('dimOverlay').classList.remove('visible');
+            }
+        }
+
+        function updateMetricsUI() {
+            const totalLocal = computeMetrics.tokensLocal;
+            const totalAll = totalLocal + computeMetrics.tokensCloud;
+            const pctOnDevice = totalAll > 0 ? Math.round((totalLocal / totalAll) * 100) : 0;
+            const costSaved = (totalLocal * 0.000015).toFixed(4);
+
+            document.getElementById('metricTokens').textContent = totalLocal.toLocaleString();
+            document.getElementById('metricCostSaved').textContent = '$' + costSaved;
+            document.getElementById('metricInferences').textContent = computeMetrics.localInferences;
+            document.getElementById('metricOnDevice').textContent = pctOnDevice + '%';
+            document.getElementById('metricNPU').textContent = computeMetrics.npuCalls + ' calls';
+            document.getElementById('metricSLM').textContent = computeMetrics.slmCalls + ' calls';
+            document.getElementById('metricDocs').textContent = computeMetrics.docsAnalyzed + ' docs';
+            document.getElementById('metricCloud').textContent = computeMetrics.cloudInferences + ' calls';
+
+            const costPerRun = parseFloat(costSaved);
+            const annualSaved = Math.round(1000 * 100 * 260 * costPerRun);
+            document.getElementById('metricProjection').textContent = '$' + annualSaved.toLocaleString() + ' saved/year';
+        }
+
+        const dropZone = document.getElementById('dropZone');
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                await uploadDocument(files[0]);
+            }
+        });
+        dropZone.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.pdf,.txt,.md,.csv';
+            input.onchange = async (e) => {
+                if (e.target.files.length > 0) {
+                    await uploadDocument(e.target.files[0]);
+                }
+            };
+            input.click();
+        });
+
+        async function uploadDocument(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const info = document.getElementById('uploadedFileInfo');
+            info.style.display = 'flex';
+            info.innerHTML = `<span>⏳ Parsing ${file.name} locally...</span>`;
+
+            try {
+                const resp = await fetch('/api/upload-document', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    currentUploadId = data.upload_id;
+                    dropZone.classList.add('has-file');
+                    document.querySelector('.drop-zone-content').style.display = 'none';
+                    info.innerHTML = `<span>✓ ${data.filename} — ${data.chars.toLocaleString()} chars extracted on-device</span>
+                        <button onclick="removeUpload(event)" style="margin-left:auto; background:none; border:1px solid var(--border); color:var(--text-dim); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:11px;">✕</button>`;
+                } else {
+                    info.innerHTML = `<span style="color:var(--red);">✗ ${data.error}</span>`;
+                    setTimeout(() => { info.style.display = 'none'; }, 4000);
+                }
+            } catch (err) {
+                info.innerHTML = `<span style="color:var(--red);">✗ Upload failed</span>`;
+                setTimeout(() => { info.style.display = 'none'; }, 4000);
+            }
+        }
+
+        function removeUpload(e) {
+            e.stopPropagation();
+            currentUploadId = null;
+            dropZone.classList.remove('has-file');
+            document.querySelector('.drop-zone-content').style.display = 'block';
+            document.getElementById('uploadedFileInfo').style.display = 'none';
+        }
+
+        // --- Autocomplete & Prefetch ---
+        function onSearchInput(value) {
+            clearTimeout(searchDebounce);
+            if (value.length < 2) {
+                hideAutocomplete();
+                return;
+            }
+            searchDebounce = setTimeout(() => fetchAutocomplete(value), 150);
+        }
+
+        function onSearchKeydown(e) {
+            const dropdown = document.getElementById('autocompleteDropdown');
+            if (!dropdown.classList.contains('visible')) {
+                if (e.key === 'Enter') startResearch();
+                return;
+            }
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                acSelectedIndex = Math.min(acSelectedIndex + 1, acResults.length - 1);
+                renderAcHighlight();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                acSelectedIndex = Math.max(acSelectedIndex - 1, -1);
+                renderAcHighlight();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (acSelectedIndex >= 0 && acResults[acSelectedIndex]) {
+                    selectAcItem(acResults[acSelectedIndex]);
+                } else {
+                    hideAutocomplete();
+                    startResearch();
+                }
+            } else if (e.key === 'Escape') {
+                hideAutocomplete();
+            }
+        }
+
+        async function fetchAutocomplete(query) {
+            try {
+                const resp = await fetch(`/api/ticker-search?q=${encodeURIComponent(query)}`);
+                const data = await resp.json();
+                acResults = data.results || [];
+                acSelectedIndex = -1;
+                renderAutocomplete();
+            } catch (err) {
+                console.error('Autocomplete error:', err);
+            }
+        }
+
+        function renderAutocomplete() {
+            const dropdown = document.getElementById('autocompleteDropdown');
+            if (acResults.length === 0) {
+                hideAutocomplete();
+                return;
+            }
+            dropdown.innerHTML = acResults.map((r, i) => `
+                <div class="ac-item ${i === acSelectedIndex ? 'selected' : ''}"
+                     onmouseenter="acSelectedIndex=${i}; renderAcHighlight()"
+                     onclick="selectAcItem(acResults[${i}])">
+                    <span class="ac-ticker">${r.ticker}</span>
+                    <span class="ac-name">${r.name}</span>
+                    <span class="ac-industry">${r.industry}</span>
+                </div>
+            `).join('');
+            dropdown.classList.add('visible');
+        }
+
+        function renderAcHighlight() {
+            const items = document.querySelectorAll('.ac-item');
+            items.forEach((item, i) => {
+                item.classList.toggle('selected', i === acSelectedIndex);
+            });
+        }
+
+        function hideAutocomplete() {
+            document.getElementById('autocompleteDropdown').classList.remove('visible');
+            acResults = [];
+            acSelectedIndex = -1;
+        }
+
+        function selectAcItem(item) {
+            document.getElementById('companyInput').value = item.name;
+            hideAutocomplete();
+            // Start prefetching immediately (Google-style predictive loading)
+            triggerPrefetch(item.name);
+        }
+
+        async function triggerPrefetch(companyName) {
+            prefetchedCompany = companyName;
+            const status = document.getElementById('prefetchStatus');
+            status.textContent = `⚡ Pre-loading data for ${companyName}...`;
+            status.style.color = 'var(--accent)';
+            try {
+                const resp = await fetch('/api/prefetch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({company_name: companyName})
+                });
+                const data = await resp.json();
+                if (data.status === 'fictional' || data.status === 'cached') {
+                    status.textContent = `✓ Data ready for ${companyName}`;
+                    status.style.color = 'var(--green)';
+                } else if (data.status === 'started') {
+                    status.textContent = `⚡ Fetching public data in background...`;
+                    // Poll until done
+                    pollPrefetch(companyName);
+                }
+            } catch (err) {
+                status.textContent = '';
+            }
+        }
+
+        async function pollPrefetch(companyName) {
+            const status = document.getElementById('prefetchStatus');
+            let attempts = 0;
+            const interval = setInterval(async () => {
+                attempts++;
+                try {
+                    const resp = await fetch('/api/prefetch', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({company_name: companyName})
+                    });
+                    const data = await resp.json();
+                    if (data.status === 'cached') {
+                        clearInterval(interval);
+                        status.textContent = `✓ ${data.sources} sources pre-loaded — ready to analyze`;
+                        status.style.color = 'var(--green)';
+                    } else if (attempts > 20) {
+                        clearInterval(interval);
+                        status.textContent = `⚡ Still loading... will continue when you click Research`;
+                        status.style.color = 'var(--text-dim)';
+                    }
+                } catch (err) {
+                    clearInterval(interval);
+                }
+            }, 1000);
+        }
+
+        // Close autocomplete on click outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-box')) hideAutocomplete();
+        });
+
+        // --- End Autocomplete & Prefetch ---
+
+        function setCompany(name) {
+            document.getElementById('companyInput').value = name;
+            hideAutocomplete();
+        }
+
+        function resetSearch() {
+            document.getElementById('searchSection').style.display = 'block';
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('crmSuccess').style.display = 'none';
+            document.getElementById('phaseMetrics').style.display = 'none';
+            document.getElementById('companyInput').value = '';
+            document.getElementById('searchSection').querySelector('h1').textContent = 'Research a prospect';
+            document.getElementById('searchSection').querySelector('p').textContent = 'Enter a company name — the device will collect public data, analyze it locally, and evaluate fit.';
+            document.getElementById('prefetchStatus').textContent = '';
+            document.getElementById('counterSources').textContent = '0';
+            document.getElementById('counterPages').textContent = '0';
+            document.getElementById('counterQueries').textContent = '0';
+            document.getElementById('counterDocs').textContent = '0';
+            document.getElementById('counterSignals').textContent = '0';
+            document.getElementById('collectionLog').innerHTML = '';
+            document.getElementById('signalList').innerHTML = '';
+            document.getElementById('workiqContent').textContent = 'Querying internal systems...';
+            document.getElementById('evalContent').textContent = 'Waiting for analysis...';
+            document.getElementById('narrative').innerHTML = '<span class="cursor"></span>';
+            document.getElementById('dimGrid').innerHTML = '';
+            document.getElementById('inlineScorecard').style.display = 'none';
+            document.getElementById('inlineFitHeader').style.display = 'none';
+            document.getElementById('crmActions').style.display = 'none';
+            document.getElementById('workiqCard').style.display = 'none';
+            document.getElementById('workiqSignalsList').innerHTML = '';
+            document.querySelectorAll('.phase').forEach(p => {
+                p.classList.remove('active', 'complete');
+                p.style.borderColor = '';
+            });
+            workiqSignals = [];
+            dimensionData = {};
+            computeMetrics = {
+                tokensLocal: 0,
+                tokensCloud: 0,
+                localInferences: 0,
+                cloudInferences: 0,
+                npuCalls: 0,
+                slmCalls: 0,
+                docsAnalyzed: 0
+            };
+            updateMetricsUI();
+            removeUpload({ stopPropagation() {} });
+        }
+
+        async function startResearch() {
+            const name = document.getElementById('companyInput').value.trim();
+            if (!name) return;
+            currentCompany = name;
+
+            const btn = document.getElementById('researchBtn');
+            btn.disabled = true;
+            btn.textContent = 'Researching...';
+
+            document.getElementById('searchSection').querySelector('h1').textContent = `Researching: ${name}`;
+            document.getElementById('progressSection').style.display = 'block';
+
+            const resp = await fetch('/api/research', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({company_name: name, upload_id: currentUploadId || ''})
+            });
+            const {job_id} = await resp.json();
+
+            const es = new EventSource(`/api/research/${job_id}/events`);
+
+            es.addEventListener('collection_started', (e) => {
+                JSON.parse(e.data);
+                document.getElementById('phaseCollection').classList.add('active');
+            });
+
+            es.addEventListener('query_sent', (e) => {
+                const d = JSON.parse(e.data);
+                document.getElementById('counterQueries').textContent = d.index;
+                document.getElementById('collectionLog').innerHTML =
+                    `<div style="animation: fadeIn 0.3s">${d.query}</div>` +
+                    document.getElementById('collectionLog').innerHTML;
+            });
+
+            es.addEventListener('source_collected', (e) => {
+                const d = JSON.parse(e.data);
+                document.getElementById('counterSources').textContent = d.total_collected;
+                document.getElementById('counterPages').textContent = d.total_pages;
+                const icon = {sec_filing: '📄', annual_report: '📊', earnings_call: '🎙️', news_article: '📰', press_release: '📢', company_website: '🌐', web_page: '🔗', local_document: '📎'}[d.type] || '📄';
+                document.getElementById('collectionLog').innerHTML =
+                    `<div style="animation: fadeIn 0.3s">${icon} ${d.title}</div>` +
+                    document.getElementById('collectionLog').innerHTML;
+            });
+
+            es.addEventListener('local_document_added', (e) => {
+                const d = JSON.parse(e.data);
+                const log = document.getElementById('collectionLog');
+                log.innerHTML = `<div style="animation: fadeIn 0.3s; color: var(--green);">📎 ${d.filename} — ${d.chars.toLocaleString()} chars (local, never sent to cloud)</div>` + log.innerHTML;
+            });
+
+            es.addEventListener('collection_complete', (e) => {
+                JSON.parse(e.data);
+                document.getElementById('phaseCollection').classList.remove('active');
+                document.getElementById('phaseCollection').classList.add('complete');
+            });
+
+            es.addEventListener('analysis_started', (e) => {
+                const d = JSON.parse(e.data);
+                document.getElementById('phaseAnalysis').classList.add('active');
+                document.getElementById('evalContent').textContent = `Engine: ${d.engine}`;
+            });
+
+            es.addEventListener('document_analyzed', (e) => {
+                const d = JSON.parse(e.data);
+                document.getElementById('counterDocs').textContent = d.progress;
+                document.getElementById('counterSignals').textContent = d.total_signals;
+                computeMetrics.docsAnalyzed += 1;
+                computeMetrics.localInferences += 1;
+                computeMetrics.tokensLocal += d.tokens_processed || 0;
+                updateMetricsUI();
+                if (d.signals && d.signals.length > 0) {
+                    d.signals.forEach(sig => {
+                        const item = document.createElement('div');
+                        item.className = 'signal-item';
+                        item.innerHTML = `
+                            <span class="signal-tag ${sig.category}">${sig.category.replace('_', ' ')}</span>
+                            <span class="signal-quote">"${sig.quote.substring(0, 80)}..."</span>
+                            <span class="signal-source">[${sig.source_id}]</span>
+                        `;
+                        document.getElementById('signalList').prepend(item);
+                    });
+                }
+            });
+
+            es.addEventListener('npu_verification', (e) => {
+                const d = JSON.parse(e.data);
+                if (d.status === 'complete') {
+                    computeMetrics.npuCalls += 1;
+                    computeMetrics.localInferences += 1;
+                    computeMetrics.tokensLocal += d.tokens_processed || 0;
+                    updateMetricsUI();
+                }
+            });
+
+            es.addEventListener('analysis_complete', () => {
+                document.getElementById('phaseAnalysis').classList.remove('active');
+                document.getElementById('phaseAnalysis').classList.add('complete');
+            });
+
+            es.addEventListener('workiq_started', () => {
+                document.getElementById('phaseWorkIQ').classList.add('active');
+                document.getElementById('workiqContent').innerHTML = '<span class="pulsing">Querying M365 Copilot...</span>';
+                computeMetrics.cloudInferences += 1;
+                updateMetricsUI();
+            });
+
+            es.addEventListener('workiq_signal', (e) => {
+                const d = JSON.parse(e.data);
+                workiqSignals.push(d);
+                document.getElementById('workiqContent').innerHTML = workiqSignals.map(s =>
+                    `<div class="workiq-signal-item"><span class="icon">${s.icon}</span> ${s.title} <span class="date">${s.date}</span></div>`
+                ).join('');
+            });
+
+            es.addEventListener('workiq_complete', (e) => {
+                const d = JSON.parse(e.data);
+                document.getElementById('phaseWorkIQ').classList.remove('active');
+                document.getElementById('phaseWorkIQ').classList.add('complete');
+                if (d.total_signals === 0) {
+                    document.getElementById('workiqContent').innerHTML = '<span style="color:var(--text-dim)">No internal engagement history found — net-new prospect.</span>';
+                }
+            });
+
+            es.addEventListener('evaluation_started', () => {
+                document.getElementById('phaseEvaluation').classList.add('active');
+                document.getElementById('phaseMetrics').style.display = 'block';
+                document.getElementById('evalContent').textContent = 'Scoring fit dimensions...';
+                document.getElementById('inlineScorecard').style.display = 'block';
+                updateMetricsUI();
+            });
+
+            es.addEventListener('dimension_scored', (e) => {
+                const d = JSON.parse(e.data);
+                document.getElementById('evalContent').textContent =
+                    `Scored: ${d.dimension_name} → ${d.score}/2 (running total: ${d.running_total})`;
+                computeMetrics.slmCalls += 1;
+                computeMetrics.localInferences += 1;
+                computeMetrics.tokensLocal += d.tokens || 0;
+                updateMetricsUI();
+                // Store dimension data for detail modal
+                dimensionData[d.dimension_name] = {
+                    name: d.dimension_name,
+                    score: d.score,
+                    evidence: d.evidence || d.reasoning || 'Score based on signals extracted from collected documents and public filings.'
+                };
+                const grid = document.getElementById('dimGrid');
+                const pct = Math.max(0, (d.score + 1) / 3 * 100);
+                const cls = d.score > 0 ? 'positive' : d.score < 0 ? 'negative' : 'neutral';
+                const safeName = d.dimension_name.replace(/'/g, "\\'");
+                grid.innerHTML += `
+                    <div class="dim-item" style="animation: fadeIn 0.3s ease">
+                        <div class="dim-name" onclick="showDimDetail('${safeName}')" title="Click for details">${d.dimension_name}</div>
+                        <div class="dim-bar"><div class="dim-fill ${cls}" style="width:${pct}%"></div></div>
+                        <div class="dim-score-val">${d.score > 0 ? '+' : ''}${d.score}</div>
+                    </div>
+                `;
+            });
+
+            es.addEventListener('fit_determined', (e) => {
+                const d = JSON.parse(e.data);
+                const evalPhase = document.getElementById('phaseEvaluation');
+                evalPhase.classList.remove('active');
+                evalPhase.classList.add('complete');
+                evalPhase.style.borderColor = d.fit_level === 'HIGH' ? 'var(--green)' : d.fit_level === 'MEDIUM' ? 'var(--yellow)' : 'var(--red)';
+                const fitHeader = document.getElementById('inlineFitHeader');
+                fitHeader.style.display = 'flex';
+                document.getElementById('fitLevel').textContent = d.fit_level;
+                document.getElementById('fitLevel').className = `fit-level ${d.fit_level}`;
+                document.getElementById('fitCompany').textContent = currentCompany;
+                document.getElementById('fitScore').textContent = `Score: ${d.total_score}/${d.max_possible}`;
+                document.getElementById('fitACV').textContent = d.acv_estimate;
+                if (workiqSignals.length > 0) {
+                    document.getElementById('workiqCard').style.display = 'block';
+                    document.getElementById('workiqSignalsList').innerHTML = workiqSignals.map(s =>
+                        `<div class="workiq-signal-item"><span class="icon">${s.icon}</span> ${s.title} <span class="date">${s.date}</span></div>`
+                    ).join('');
+                }
+                document.getElementById('crmActions').style.display = 'flex';
+            });
+
+            es.addEventListener('narrative_token', (e) => {
+                const d = JSON.parse(e.data);
+                computeMetrics.tokensLocal += d.tokens || 0;
+                updateMetricsUI();
+                const narrative = document.getElementById('narrative');
+                const cursor = narrative.querySelector('.cursor');
+                if (cursor) cursor.remove();
+                narrative.innerHTML += d.token;
+                narrative.innerHTML += '<span class="cursor"></span>';
+            });
+
+            es.addEventListener('narrative_complete', () => {
+                const cursor = document.getElementById('narrative').querySelector('.cursor');
+                if (cursor) cursor.remove();
+            });
+
+            es.addEventListener('metrics_summary', (e) => {
+                const d = JSON.parse(e.data);
+                computeMetrics = {
+                    tokensLocal: d.total_tokens_local || 0,
+                    tokensCloud: d.total_tokens_cloud || 0,
+                    localInferences: d.local_inferences || 0,
+                    cloudInferences: d.cloud_inferences || 0,
+                    npuCalls: d.npu_calls || 0,
+                    slmCalls: d.slm_calls || 0,
+                    docsAnalyzed: d.documents_analyzed || 0
+                };
+                updateMetricsUI();
+            });
+
+            es.addEventListener('job_complete', () => {
+                es.close();
+                btn.disabled = false;
+                btn.textContent = 'Research';
+            });
+
+            es.onerror = () => {
+                es.close();
+                btn.disabled = false;
+                btn.textContent = 'Research';
+            };
+        }
+
+        async function pushToCRM() {
+            const resp = await fetch('/api/crm/push', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({company_name: currentCompany})
+            });
+            const data = await resp.json();
+            const success = document.getElementById('crmSuccess');
+            success.style.display = 'block';
+            success.innerHTML = `✓ ${data.message}<br><small>Opportunity: ${data.details.opportunity_id} | Stage: ${data.details.stage} | Owner: ${data.details.owner}</small>`;
+            document.getElementById('crmActions').style.display = 'none';
+        }
+
+        function dismiss() {
+            document.getElementById('crmActions').innerHTML = '<span style="color: var(--text-dim);">Dismissed — will not pursue at this time.</span>';
+        }
+
+        // Enter key support
+        document.getElementById('companyInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') startResearch();
+        });
+    </script>
+</body>
+</html>

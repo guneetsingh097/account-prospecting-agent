@@ -1,0 +1,6 @@
+flask
+openai
+foundry-local-sdk==0.5.1
+requests
+python-dotenv
+pypdf
