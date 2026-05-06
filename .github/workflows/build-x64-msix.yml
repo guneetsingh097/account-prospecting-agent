@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pyinstaller flask requests httpx openai tiktoken python-dotenv pypdf
+          pip install pyinstaller flask requests httpx openai tiktoken python-dotenv pypdf pillow
           pip install foundry-local || echo "foundry-local not available on x64 runner, skipping"
           pip install brave-search || echo "brave-search not available, skipping"
 
