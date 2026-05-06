@@ -1,6 +1,8 @@
 """Generate Store icon assets for Account Prospecting Agent."""
-from PIL import Image, ImageDraw, ImageFont
+import sys
 import os
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+from PIL import Image, ImageDraw, ImageFont
 
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'packaging', 'Assets')
 os.makedirs(ASSETS_DIR, exist_ok=True)
