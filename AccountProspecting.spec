@@ -4,22 +4,26 @@
 import os
 SRC = os.path.dirname(os.path.abspath(SPEC))
 
+# Build datas list, skipping files that don't exist (e.g. .env in CI)
+_datas = [
+    (os.path.join(SRC, 'app.py'), '.'),
+    (os.path.join(SRC, 'analyzer.py'), '.'),
+    (os.path.join(SRC, 'collector.py'), '.'),
+    (os.path.join(SRC, 'companies.py'), '.'),
+    (os.path.join(SRC, 'evaluator.py'), '.'),
+    (os.path.join(SRC, 'tickers.py'), '.'),
+    (os.path.join(SRC, 'workiq.py'), '.'),
+    (os.path.join(SRC, '.env'), '.'),
+    (os.path.join(SRC, 'templates'), 'templates'),
+    (os.path.join(SRC, 'static'), 'static'),
+]
+datas = [(src, dst) for src, dst in _datas if os.path.exists(src)]
+
 a = Analysis(
     [os.path.join(SRC, 'launcher.py')],
     pathex=[SRC],
     binaries=[],
-    datas=[
-        (os.path.join(SRC, 'app.py'), '.'),
-        (os.path.join(SRC, 'analyzer.py'), '.'),
-        (os.path.join(SRC, 'collector.py'), '.'),
-        (os.path.join(SRC, 'companies.py'), '.'),
-        (os.path.join(SRC, 'evaluator.py'), '.'),
-        (os.path.join(SRC, 'tickers.py'), '.'),
-        (os.path.join(SRC, 'workiq.py'), '.'),
-        (os.path.join(SRC, '.env'), '.'),
-        (os.path.join(SRC, 'templates'), 'templates'),
-        (os.path.join(SRC, 'static'), 'static'),
-    ],
+    datas=datas,
     hiddenimports=[
         'flask', 'werkzeug', 'jinja2', 'markupsafe', 'click', 'blinker', 'itsdangerous',
         'requests', 'urllib3', 'charset_normalizer', 'certifi', 'idna',
