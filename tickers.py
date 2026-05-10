@@ -209,7 +209,8 @@ def search_tickers(query: str, limit: int = 8) -> list:
             results.append({
                 "ticker": ticker,
                 "name": name,
-                "industry": industry
+                "industry": industry,
+                "country_code": "us",
             })
             if len(results) >= limit:
                 break

@@ -11,6 +11,7 @@ FICTIONAL_COMPANIES = {
         "revenue": "$4.2B",
         "headcount": "18,000",
         "hq": "Portland, OR",
+        "country_code": "us",
         "facilities": 12,
         "description": "Global technology manufacturer specializing in industrial IoT sensors and smart building systems.",
         "sources": [
@@ -184,6 +185,7 @@ FICTIONAL_COMPANIES = {
         "revenue": "$7.8B",
         "headcount": "32,000",
         "hq": "Chicago, IL",
+        "country_code": "us",
         "facilities": 24,
         "description": "Diversified manufacturer of industrial equipment and precision components with operations in 14 countries.",
         "sources": [
@@ -333,6 +335,7 @@ FICTIONAL_COMPANIES = {
         "revenue": "$1.8B",
         "headcount": "9,500",
         "hq": "San Francisco, CA",
+        "country_code": "us",
         "facilities": 4,
         "description": "Management consulting and research firm specializing in digital transformation advisory.",
         "sources": [
@@ -458,6 +461,7 @@ FICTIONAL_COMPANIES = {
         "revenue": "$3.1B",
         "headcount": "14,000",
         "hq": "Seattle, WA",
+        "country_code": "us",
         "facilities": 8,
         "description": "Regional retail chain and distribution company specializing in sustainable and organic food products.",
         "sources": [

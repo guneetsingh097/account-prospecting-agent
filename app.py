@@ -92,10 +92,12 @@ def api_ticker_search():
     fictional_matches = []
     for name in list_companies():
         if q.lower() in name.lower():
+            company = get_company(name)
             fictional_matches.append({
                 "ticker": "DEMO",
                 "name": name,
-                "industry": "Fictional (pre-loaded)"
+                "industry": "Fictional (pre-loaded)",
+                "country_code": company.get("country_code", "us") if company else "us",
             })
 
     ticker_results = search_tickers(q)

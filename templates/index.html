@@ -615,6 +615,15 @@
             transition: opacity 0.3s;
         }
         .ac-prefetch-indicator.active { opacity: 1; }
+        .flag-img {
+            display: inline-block;
+            width: 20px;
+            height: 15px;
+            object-fit: cover;
+            border-radius: 2px;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
@@ -870,6 +879,7 @@
 
     <script>
         let currentCompany = '';
+        let currentCountryCode = 'us';
         let currentUploadId = null;
         let workiqSignals = [];
         let acSelectedIndex = -1;
@@ -877,6 +887,14 @@
         let searchDebounce = null;
         let prefetchedCompany = null;
         let dimensionData = {}; // stores {name, score, evidence} for detail modal
+
+        // Renders a country flag as an <img> so it works on Windows 11,
+        // which lacks flag emoji glyphs in Segoe UI Emoji.
+        function flagImg(countryCode, size) {
+            const cc = (countryCode || 'us').toLowerCase();
+            const w = size || 20;
+            return `<img class="flag-img" src="https://flagcdn.com/w${w}/${cc}.png" alt="${cc.toUpperCase()} flag" width="${w}" height="${Math.round(w * 0.75)}">`;
+        }
         let computeMetrics = {
             tokensLocal: 0,
             tokensCloud: 0,
@@ -1154,6 +1172,7 @@
                      onmouseenter="acSelectedIndex=${i}; renderAcHighlight()"
                      onclick="selectAcItem(acResults[${i}])">
                     <span class="ac-ticker">${r.ticker}</span>
+                    ${flagImg(r.country_code)}
                     <span class="ac-name">${r.name}</span>
                     <span class="ac-industry">${r.industry}</span>
                 </div>
@@ -1176,6 +1195,7 @@
 
         function selectAcItem(item) {
             document.getElementById('companyInput').value = item.name;
+            currentCountryCode = item.country_code || 'us';
             hideAutocomplete();
             // Start prefetching immediately (Google-style predictive loading)
             triggerPrefetch(item.name);
@@ -1246,6 +1266,7 @@
         }
 
         function resetSearch() {
+            currentCountryCode = 'us';
             document.getElementById('searchSection').style.display = 'block';
             document.getElementById('progressSection').style.display = 'none';
             document.getElementById('crmSuccess').style.display = 'none';
@@ -1457,7 +1478,7 @@
                 fitHeader.style.display = 'flex';
                 document.getElementById('fitLevel').textContent = d.fit_level;
                 document.getElementById('fitLevel').className = `fit-level ${d.fit_level}`;
-                document.getElementById('fitCompany').textContent = currentCompany;
+                document.getElementById('fitCompany').innerHTML = flagImg(currentCountryCode, 16) + ' ' + currentCompany;
                 document.getElementById('fitScore').textContent = `Score: ${d.total_score}/${d.max_possible}`;
                 document.getElementById('fitACV').textContent = d.acv_estimate;
                 if (workiqSignals.length > 0) {
