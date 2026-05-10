@@ -617,10 +617,6 @@
         .ac-prefetch-indicator.active { opacity: 1; }
         .flag-img {
             display: inline-block;
-            width: 20px;
-            height: 15px;
-            object-fit: cover;
-            border-radius: 2px;
             vertical-align: middle;
             flex-shrink: 0;
         }
@@ -888,12 +884,14 @@
         let prefetchedCompany = null;
         let dimensionData = {}; // stores {name, score, evidence} for detail modal
 
-        // Renders a country flag as an <img> so it works on Windows 11,
-        // which lacks flag emoji glyphs in Segoe UI Emoji.
+        // Renders a country flag as an <img> using Twemoji SVGs so it works on
+        // Windows 11 (which lacks flag glyphs in Segoe UI Emoji) while matching
+        // the flat emoji style used for all other emoji on the page.
         function flagImg(countryCode, size) {
-            const cc = (countryCode || 'us').toLowerCase();
+            const cc = (countryCode || 'us').toUpperCase();
+            const twName = cc.split('').map(c => (0x1F1E6 + c.charCodeAt(0) - 65).toString(16)).join('-');
             const w = size || 20;
-            return `<img class="flag-img" src="https://flagcdn.com/w${w}/${cc}.png" alt="${cc.toUpperCase()} flag" width="${w}" height="${Math.round(w * 0.75)}">`;
+            return `<img class="flag-img" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${twName}.svg" alt="${cc} flag" width="${w}" height="${w}">`;
         }
         let computeMetrics = {
             tokensLocal: 0,
