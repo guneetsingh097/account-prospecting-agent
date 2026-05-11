@@ -193,6 +193,23 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
                     "total_pages": total_pages
                 }}
 
+    # Enrich: fetch actual page content from the company's own sustainability pages
+    enriched = _enrich_company_pages(all_sources, company_name)
+    for src in enriched:
+        source_counter += 1
+        total_pages += 8
+        src["id"] = f"ENRICH-{source_counter}"
+        all_sources.append(src)
+        yield {"event": "source_collected", "data": {
+            "id": src["id"],
+            "type": src["type"],
+            "title": src["title"],
+            "date": src.get("date", "current"),
+            "pages": 8,
+            "total_collected": source_counter,
+            "total_pages": total_pages
+        }}
+
     yield {"event": "collection_complete", "data": {
         "total_sources": source_counter,
         "total_pages": total_pages,
@@ -216,3 +233,97 @@ def _classify_source_type(url: str, title: str) -> str:
     if any(x in url_lower for x in ["reuters", "bloomberg", "ft.com", "nytimes", "wsj"]):
         return "news_article"
     return "web_page"
+
+
+def _enrich_company_pages(existing_sources: list, company_name: str) -> list:
+    """
+    Fetch actual page content from the company's own sustainability/ESG pages.
+    Looks through collected URLs for sustainability-related pages on the company's
+    own domain, then fetches their text content for deeper signal extraction.
+    """
+    import re
+    from html.parser import HTMLParser
+
+    sustainability_keywords = ["sustain", "esg", "environment", "climate", "carbon",
+                               "green", "responsible", "circular", "renewable", "impact"]
+    enriched = []
+    seen_domains = set()
+
+    # Find company-owned sustainability pages from search results
+    candidate_urls = []
+    for src in existing_sources:
+        url = src.get("url", "").lower()
+        if not url:
+            continue
+        # Skip news sites, SEC, etc. — we want the company's own site
+        if any(x in url for x in ["sec.gov", "reuters", "bloomberg", "wsj", "nytimes",
+                                   "ft.com", "wikipedia", "youtube", "linkedin"]):
+            continue
+        if any(kw in url for kw in sustainability_keywords):
+            candidate_urls.append(src.get("url", ""))
+
+    # Also try common sustainability page patterns for the company
+    company_slug = company_name.lower().replace(" ", "").replace(",", "").replace(".", "")
+    common_paths = [
+        f"https://www.{company_slug}.com/sustainability",
+        f"https://www.{company_slug}.com/esg",
+        f"https://www.{company_slug}.com/environment",
+        f"https://www.{company_slug}.com/sustainable-impact",
+    ]
+    candidate_urls.extend(common_paths)
+
+    # Fetch up to 3 pages for content enrichment
+    class TextExtractor(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.text_parts = []
+            self._skip = False
+        def handle_starttag(self, tag, attrs):
+            if tag in ("script", "style", "nav", "footer", "header"):
+                self._skip = True
+        def handle_endtag(self, tag):
+            if tag in ("script", "style", "nav", "footer", "header"):
+                self._skip = False
+        def handle_data(self, data):
+            if not self._skip:
+                cleaned = data.strip()
+                if len(cleaned) > 20:
+                    self.text_parts.append(cleaned)
+
+    fetched = 0
+    for url in candidate_urls:
+        if fetched >= 3:
+            break
+        # Dedupe by domain
+        try:
+            domain = url.split("/")[2]
+        except IndexError:
+            continue
+        if domain in seen_domains:
+            continue
+
+        try:
+            resp = requests.get(url, timeout=6, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Proseware-Research/1.0"
+            })
+            if resp.status_code != 200:
+                continue
+
+            parser = TextExtractor()
+            parser.feed(resp.text[:50000])
+            page_text = " ".join(parser.text_parts)[:2000]
+
+            if len(page_text) > 100:
+                seen_domains.add(domain)
+                fetched += 1
+                enriched.append({
+                    "type": "company_website",
+                    "title": f"{company_name} — Sustainability Page ({domain})",
+                    "date": "current",
+                    "url": url,
+                    "excerpt": page_text
+                })
+        except Exception:
+            continue
+
+    return enriched
