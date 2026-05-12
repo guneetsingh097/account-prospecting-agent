@@ -2,7 +2,7 @@
 Collector module — fetches public data about a company.
 Dual-mode:
   - Fictional companies: returns pre-loaded documents from companies.py
-  - Real companies: hits Bing Search + SEC EDGAR live (parallel)
+  - Real companies: hits Brave Search + SEC EDGAR live (parallel)
 """
 
 import os
@@ -12,8 +12,8 @@ from typing import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from companies import get_company
 
-BING_API_KEY = os.environ.get("BING_SEARCH_API_KEY", "")
-BING_HEADERS = {"Ocp-Apim-Subscription-Key": BING_API_KEY}
+BRAVE_API_KEY = os.environ.get("BRAVE_SEARCH_API_KEY", "")
+BRAVE_HEADERS = {"X-Subscription-Token": BRAVE_API_KEY, "Accept": "application/json"}
 
 
 def collect(company_name: str) -> Generator[dict, None, None]:
@@ -101,9 +101,9 @@ def _collect_fictional(company: dict) -> Generator[dict, None, None]:
 
 
 def _collect_live(company_name: str) -> Generator[dict, None, None]:
-    """Collect live data via Bing Search API for real companies — parallel fetching."""
-    if not BING_API_KEY:
-        yield {"event": "error", "data": {"message": "Bing Search API key not configured — add BING_SEARCH_API_KEY to .env"}}
+    """Collect live data via Brave Search API for real companies — parallel fetching."""
+    if not BRAVE_API_KEY:
+        yield {"event": "error", "data": {"message": "Brave API key not configured — add BRAVE_SEARCH_API_KEY to .env"}}
         return
 
     yield {"event": "collection_started", "data": {
@@ -116,7 +116,7 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
         "scope": "3 years (2022–2025)"
     }}
 
-    # Define search queries covering 3 years of data — parallel for speed
+    # Broad set of queries covering sustainability, financials, governance, and news
     queries = [
         (f'"{company_name}" sustainability ESG carbon emissions report 2023 2024', "web"),
         (f'"{company_name}" SEC 10-K annual report 2024 2023', "web"),
@@ -129,8 +129,13 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
         (f'"{company_name}" CDP climate score disclosure rating', "web"),
         (f'"{company_name}" investor pressure climate shareholder proposal', "web"),
         (f'"{company_name}" sustainability technology platform vendor', "web"),
+        (f'"{company_name}" sustainability report PDF 2024 2025', "web"),
+        (f'"{company_name}" environmental impact water waste circular economy', "web"),
+        (f'"{company_name}" SBTi science based targets commitment', "web"),
+        (f'"{company_name}" proxy statement executive compensation ESG', "web"),
         (f'{company_name} sustainability carbon emissions 2024 2025', "news"),
         (f'{company_name} ESG regulation compliance 2025', "news"),
+        (f'{company_name} climate net-zero renewable energy 2025', "news"),
     ]
 
     # Fire all queries in parallel
@@ -138,27 +143,31 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
         query, qtype = query_info
         try:
             if qtype == "news":
-                url = "https://api.bing.microsoft.com/v7.0/news/search"
+                url = "https://api.search.brave.com/res/v1/news/search"
             else:
-                url = "https://api.bing.microsoft.com/v7.0/search"
-            resp = requests.get(url, params={"q": query, "count": 5},
-                              headers=BING_HEADERS, timeout=6)
+                url = "https://api.search.brave.com/res/v1/web/search"
+            resp = requests.get(url, params={"q": query, "count": 10},
+                              headers=BRAVE_HEADERS, timeout=8)
             if resp.status_code == 200:
                 return (query, qtype, resp.json())
+            else:
+                print(f"[BRAVE] Query failed ({resp.status_code}): {query[:60]}...")
             return (query, qtype, None)
-        except Exception:
+        except Exception as e:
+            print(f"[BRAVE] Error: {e} — {query[:60]}...")
             return (query, qtype, None)
 
     # Show query events immediately for visual feedback
     for i, (q, _) in enumerate(queries):
         yield {"event": "query_sent", "data": {"query": q, "index": i + 1, "total": len(queries)}}
 
-    # Execute all in parallel (major speedup: ~1x latency instead of ~6x)
+    # Execute all in parallel
     all_sources = []
     total_pages = 0
     source_counter = 0
+    seen_urls = set()
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {executor.submit(_fetch, q): q for q in queries}
         for future in as_completed(futures):
             query, qtype, data = future.result()
@@ -166,21 +175,25 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
                 continue
 
             if qtype == "news":
-                results = data.get("value", [])
+                results = data.get("results", [])
             else:
-                results = data.get("webPages", {}).get("value", [])
+                results = data.get("web", {}).get("results", [])
 
-            for r in results[:4]:  # Top 4 per query for broader coverage
+            for r in results[:8]:
+                url = r.get("url", "")
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
                 source_counter += 1
                 pages = 5 if qtype == "web" else 2
                 total_pages += pages
                 source = {
                     "id": f"{'NEWS' if qtype == 'news' else 'WEB'}-{source_counter}",
-                    "type": _classify_source_type(r.get("url", ""), r.get("name", "")) if qtype == "web" else "news_article",
-                    "title": r.get("name", "")[:100],
-                    "date": (r.get("datePublished", "")[:10] or "recent"),
-                    "url": r.get("url", ""),
-                    "excerpt": r.get("snippet", r.get("description", ""))[:500]
+                    "type": _classify_source_type(r.get("url", ""), r.get("title", "")) if qtype == "web" else "news_article",
+                    "title": r.get("title", "")[:100],
+                    "date": (r.get("page_age", "")[:10] or r.get("age", "recent")),
+                    "url": url,
+                    "excerpt": r.get("description", "")[:500]
                 }
                 all_sources.append(source)
                 yield {"event": "source_collected", "data": {

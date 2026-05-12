@@ -43,6 +43,7 @@ DIMENSIONS = [
         "id": "regulatory_pressure",
         "name": "Regulatory Pressure",
         "description": "External regulatory forcing functions (CSRD, SEC climate rules, etc.)",
+        "max_score": 10,
         "scoring": {
             "8-10": "Active deadline + compliance gap + multiple regulatory frameworks",
             "5-7": "Regulatory mentions in filings with some urgency",
@@ -54,6 +55,7 @@ DIMENSIONS = [
         "id": "executive_commitment",
         "name": "Executive Commitment",
         "description": "Leadership-level sustainability commitment signals",
+        "max_score": 10,
         "scoring": {
             "8-10": "C-suite hire (CSO) + public pledge + board committee + budget allocation",
             "5-7": "Public pledges, sustainability reports, leadership mentions",
@@ -65,6 +67,7 @@ DIMENSIONS = [
         "id": "measurement_gap",
         "name": "Measurement Gap",
         "description": "Acknowledgment they cannot currently track/measure emissions",
+        "max_score": 10,
         "scoring": {
             "8-10": "Explicitly stated measurement gaps + active vendor evaluation",
             "5-7": "Partial reporting, known gaps in Scope 3 or supply chain",
@@ -73,20 +76,22 @@ DIMENSIONS = [
         }
     },
     {
-        "id": "budget_availability",
-        "name": "Budget Availability",
-        "description": "Financial capacity and willingness to invest",
+        "id": "deal_size",
+        "name": "Deal Size",
+        "description": "Estimated annual contract value based on company size, revenue, and complexity",
+        "max_score": 10,
         "scoring": {
-            "8-10": "Specific budget allocated + revenue growing + investment language",
-            "5-7": "Revenue growing, general sustainability investment signals",
-            "2-4": "Stable finances but no specific sustainability budget",
-            "0-1": "No financial capacity signals"
+            "8-10": "Large enterprise ($5B+ revenue, 20+ facilities, multi-country) → $300K+ ACV",
+            "5-7": "Mid-market ($1-5B revenue, 5-20 facilities) → $100-300K ACV",
+            "2-4": "Growing company ($500M-1B) → $50-100K ACV",
+            "0-1": "Small or simple operations → <$50K ACV"
         }
     },
     {
         "id": "urgency_timing",
         "name": "Urgency / Timing",
         "description": "Time pressure creating a 'buy now' forcing function",
+        "max_score": 10,
         "scoring": {
             "8-10": "Hard deadline + active vendor evaluation + board mandate",
             "5-7": "Pledges with dates, upcoming regulatory deadlines",
@@ -95,23 +100,25 @@ DIMENSIONS = [
         }
     },
     {
-        "id": "deal_size_potential",
-        "name": "Deal Size Potential",
-        "description": "Estimated annual contract value based on company size/complexity",
+        "id": "internal_engagement",
+        "name": "Internal Engagement",
+        "description": "Internal signals from Microsoft WorkIQ — content downloads, webinars, emails, meetings, site visits",
+        "max_score": 50,
         "scoring": {
-            "8-10": "Large enterprise ($5B+ revenue, 20+ facilities, multi-country) → $300K+ ACV",
-            "5-7": "Mid-market ($1-5B revenue, 5-20 facilities) → $100-300K ACV",
-            "2-4": "Growing company ($500M-1B) → $50-100K ACV",
-            "0-1": "Small or simple operations → <$50K ACV"
+            "35-50": "Multi-channel engagement: meetings booked, content consumed, Teams discussions, site visits",
+            "20-34": "Moderate engagement: webinar attendance, email opens, some site activity",
+            "10-19": "Light engagement: single content download or site visit",
+            "0-9": "Minimal or no internal engagement signals"
         }
     }
 ]
 
 
-def evaluate_fit(signals: list, company_data: dict) -> Generator[dict, None, None]:
+def evaluate_fit(signals: list, company_data: dict, engagement_data: dict = None) -> Generator[dict, None, None]:
     """
     Evaluate company fit using collected signals.
     Yields streaming events: dimension scores, then overall assessment.
+    engagement_data: dict with 'score', 'level', 'signals' from WorkIQ
     """
     yield {"event": "evaluation_started", "data": {
         "dimensions": len(DIMENSIONS),
@@ -121,6 +128,7 @@ def evaluate_fit(signals: list, company_data: dict) -> Generator[dict, None, Non
     # Score each dimension
     scores = {}
     total_score = 0
+    max_possible = 0
     evaluation_metrics = {
         "dimension_tokens": 0,
         "narrative_tokens_generated": 0,
@@ -129,9 +137,15 @@ def evaluate_fit(signals: list, company_data: dict) -> Generator[dict, None, Non
     }
 
     for dim in DIMENSIONS:
-        time.sleep(0.5)  # Pacing for visual effect
-        dim_signals = [s for s in signals if s["category"] == dim["id"]]
-        score, evidence = _score_dimension(dim, dim_signals, company_data)
+        dim_max = dim.get("max_score", 10)
+        max_possible += dim_max
+
+        if dim["id"] == "internal_engagement":
+            score, evidence = _score_internal_engagement(engagement_data)
+        else:
+            dim_signals = [s for s in signals if s["category"] == dim["id"]]
+            score, evidence = _score_dimension(dim, dim_signals, company_data)
+
         scores[dim["id"]] = {"score": score, "evidence": evidence, "name": dim["name"]}
         total_score += score
         estimated_tokens = max(1, (len(evidence) + len(dim["name"]) + len(dim["description"])) // 4)
@@ -141,13 +155,13 @@ def evaluate_fit(signals: list, company_data: dict) -> Generator[dict, None, Non
             "dimension_id": dim["id"],
             "dimension_name": dim["name"],
             "score": score,
-            "max_score": 10,
+            "max_score": dim_max,
             "evidence": evidence,
             "running_total": total_score,
             "tokens": estimated_tokens
         }}
 
-    max_possible = len(DIMENSIONS) * 10  # 60
+    # max_possible already calculated in loop above (100)
 
     # Determine fit level based on percentage of max
     score_pct = (total_score / max_possible) * 100 if max_possible > 0 else 0
@@ -177,6 +191,36 @@ def evaluate_fit(signals: list, company_data: dict) -> Generator[dict, None, Non
         yield from _stream_narrative(company_data, scores, fit_level, total_score, signals, evaluation_metrics)
     else:
         yield from _generate_structured_narrative(company_data, scores, fit_level, total_score, evaluation_metrics)
+
+
+def _score_internal_engagement(engagement_data: dict) -> tuple:
+    """Score internal engagement 0-50 based on WorkIQ signals.
+    Maps the raw engagement score (0-123 range) proportionally to 0-50."""
+    if not engagement_data:
+        return 0, "No internal engagement data available"
+
+    raw_score = engagement_data.get("score", 0)
+    level = engagement_data.get("engagement_level", "Minimal")
+    total_sigs = engagement_data.get("total_signals", 0)
+    signal_types = engagement_data.get("signal_types", [])
+
+    # Proportional scaling: raw points (max ~123) → 0-50
+    # Use 100 as effective max so typical scores map intuitively
+    score = min(50, round((raw_score / 100) * 50))
+
+    if score >= 35:
+        evidence = f"{level} engagement ({total_sigs} signals) — multi-channel activity detected"
+    elif score >= 20:
+        evidence = f"{level} engagement ({total_sigs} signals) — moderate interest signals"
+    elif score >= 10:
+        evidence = f"{level} engagement ({total_sigs} signals) — early-stage interest"
+    else:
+        evidence = f"{level} engagement ({total_sigs} signals) — minimal activity"
+
+    if signal_types:
+        evidence += f": {', '.join(signal_types[:4])}"
+
+    return score, evidence
 
 
 def _score_dimension(dimension: dict, dim_signals: list, company_data: dict) -> tuple:

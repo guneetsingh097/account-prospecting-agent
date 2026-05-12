@@ -6,7 +6,7 @@ watch the device collect public data, classify with NPU, evaluate fit
 with local SLM, and surface internal signals from WorkIQ.
 
 Three data lanes:
-  🌐 Web Collection (Bing Search + SEC EDGAR) → downloaded to device
+  🌐 Web Collection (Brave Search + SEC EDGAR) → downloaded to device
   ☁️ Internal Signals (WorkIQ / M365 Copilot) → queried from cloud
   💻 Local AI (NPU + SLM) → all inference on-device
 """
@@ -62,7 +62,7 @@ init_npu()
 init_foundry()
 
 print(f"\n[READY] Fictional companies loaded: {', '.join(list_companies())}")
-print(f"[READY] Bing Search API key: {'configured' if os.environ.get('BING_SEARCH_API_KEY') else 'MISSING'}")
+print(f"[READY] Brave Search API key: {'configured' if os.environ.get('BRAVE_SEARCH_API_KEY') else 'MISSING'}")
 print(f"[READY] Open http://localhost:5001 in your browser\n")
 
 
@@ -253,7 +253,42 @@ def api_research_events(job_id):
         # Phase 1: Collection
         collected_sources = []
         all_signals = []
+        engagement_data = {}
         fictional = get_company(company_name)
+
+        # Start WorkIQ in parallel — it queries cloud while we collect & analyze locally
+        import queue
+        workiq_queue = queue.Queue()
+        def _run_workiq():
+            for event in query_workiq(company_name):
+                workiq_queue.put(event)
+            workiq_queue.put(None)  # sentinel
+        from threading import Thread
+        workiq_thread = Thread(target=_run_workiq, daemon=True)
+        workiq_thread.start()
+
+        def _flush_workiq():
+            """Emit any queued WorkIQ events without blocking. Returns (sse_strings, is_done)."""
+            chunks = []
+            done = False
+            while not workiq_queue.empty():
+                try:
+                    event = workiq_queue.get_nowait()
+                except Exception:
+                    break
+                if event is None:
+                    done = True
+                    break
+                chunks.append(f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n")
+                if event["event"] == "workiq_started":
+                    compute_metrics["cloud_inferences"] += 1
+                elif event["event"] == "workiq_complete":
+                    engagement_data["score"] = event["data"].get("engagement_score", 0)
+                    engagement_data["engagement_level"] = event["data"].get("engagement_level", "Minimal")
+                    engagement_data["total_signals"] = event["data"].get("total_signals", 0)
+                    signal_types = list({s.get("type", "").replace("_", " ") for s in event["data"].get("signals", []) if s.get("type") != "npu_insight"})
+                    engagement_data["signal_types"] = signal_types
+            return chunks, done
 
         # Check if we have prefetched data (from type-ahead predictive loading)
         prefetched = prefetch_cache.pop(company_name.lower(), None)
@@ -261,6 +296,10 @@ def api_research_events(job_id):
         if prefetched and not fictional:
             # Use prefetched data — emit events quickly to show progress
             yield f"event: collection_started\ndata: {json.dumps({'company': company_name, 'mode': 'live (prefetched)', 'scope': '3 years (2022–2025)'})}\n\n"
+            # Emit query_sent events so the UI counter updates
+            num_queries = min(18, len(prefetched))
+            for qi in range(num_queries):
+                yield f"event: query_sent\ndata: {json.dumps({'query': f'prefetched query {qi+1}', 'index': qi+1, 'total': num_queries})}\n\n"
             total_pages = 0
             for i, src in enumerate(prefetched):
                 total_pages += src.get("pages", 10)
@@ -270,7 +309,7 @@ def api_research_events(job_id):
                 time.sleep(0.05)
             collected_sources = prefetched
             compute_metrics["cloud_inferences"] += len(prefetched)
-            yield f"event: collection_complete\ndata: {json.dumps({'total_sources': len(prefetched), 'total_queries': len(prefetched), 'prefetched': True})}\n\n"
+            yield f"event: collection_complete\ndata: {json.dumps({'total_sources': len(prefetched), 'total_queries': num_queries, 'prefetched': True})}\n\n"
         else:
             # Wait for prefetch if in progress
             if company_name.lower() in prefetch_threads:
@@ -280,6 +319,9 @@ def api_research_events(job_id):
                     prefetched = prefetch_cache.pop(company_name.lower(), None)
                     if prefetched:
                         yield f"event: collection_started\ndata: {json.dumps({'company': company_name, 'mode': 'live (prefetched)', 'scope': '3 years (2022–2025)'})}\n\n"
+                        num_queries2 = min(18, len(prefetched))
+                        for qi in range(num_queries2):
+                            yield f"event: query_sent\ndata: {json.dumps({'query': f'prefetched query {qi+1}', 'index': qi+1, 'total': num_queries2})}\n\n"
                         total_pages = 0
                         for i, src in enumerate(prefetched):
                             total_pages += src.get("pages", 10)
@@ -289,7 +331,7 @@ def api_research_events(job_id):
                             time.sleep(0.05)
                         collected_sources = prefetched
                         compute_metrics["cloud_inferences"] += len(prefetched)
-                        yield f"event: collection_complete\ndata: {json.dumps({'total_sources': len(prefetched), 'total_queries': len(prefetched), 'prefetched': True})}\n\n"
+                        yield f"event: collection_complete\ndata: {json.dumps({'total_sources': len(prefetched), 'total_queries': num_queries2, 'prefetched': True})}\n\n"
 
             # Normal collection if no prefetch available
             if not collected_sources:
@@ -335,12 +377,18 @@ def api_research_events(job_id):
             yield f"event: local_document_added\ndata: {json.dumps({'filename': doc['filename'], 'pages': doc['pages'], 'chars': len(doc['text']), 'message': 'Local document added to analysis — processed entirely on-device'})}\n\n"
 
         analysis_started_at = time.perf_counter()
+        workiq_done = False
         for event in analyze_sources(sources_to_analyze, company_name, fictional=bool(fictional)):
             yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
             if event["event"] == "document_analyzed":
                 compute_metrics["documents_analyzed"] += 1
                 compute_metrics["local_inferences"] += 1
                 compute_metrics["total_tokens_local"] += event["data"].get("tokens_processed", 0)
+                # Interleave WorkIQ events during analysis
+                if not workiq_done:
+                    chunks, workiq_done = _flush_workiq()
+                    for chunk in chunks:
+                        yield chunk
             elif event["event"] == "npu_verification" and event["data"].get("status") == "complete":
                 compute_metrics["npu_calls"] += 1
                 compute_metrics["local_inferences"] += 1
@@ -349,11 +397,12 @@ def api_research_events(job_id):
                 all_signals = event["data"].get("signals", [])
         compute_metrics["local_processing_time_ms"] += int((time.perf_counter() - analysis_started_at) * 1000)
 
-        # Phase 3: WorkIQ (internal signals)
-        for event in query_workiq(company_name):
-            yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
-            if event["event"] == "workiq_started":
-                compute_metrics["cloud_inferences"] += 1
+        # Flush any remaining WorkIQ events (non-blocking)
+        if not workiq_done:
+            workiq_thread.join(timeout=1)
+            chunks, _ = _flush_workiq()
+            for chunk in chunks:
+                yield chunk
 
         # Phase 4: SLM Fit Evaluation
         if fictional:
@@ -376,7 +425,7 @@ def api_research_events(job_id):
             }
 
         evaluation_started_at = time.perf_counter()
-        for event in evaluate_fit(all_signals, company_data):
+        for event in evaluate_fit(all_signals, company_data, engagement_data=engagement_data):
             yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
             if event["event"] == "dimension_scored":
                 compute_metrics["slm_calls"] += 1
@@ -484,7 +533,7 @@ def api_reanalyze():
             }
 
         # Re-run fit evaluation with new signals
-        for event in evaluate_fit(all_signals, company_data):
+        for event in evaluate_fit(all_signals, company_data, engagement_data={}):
             yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
 
         local_ms = int((time.perf_counter() - analysis_started_at) * 1000)

@@ -123,9 +123,8 @@ def _npu_batch_analyze(combined_text: str, company_name: str) -> list:
         f"- regulatory_pressure (regulations, compliance, disclosure requirements)\n"
         f"- executive_commitment (sustainability pledges, leadership actions, ESG goals)\n"
         f"- measurement_gap (emissions tracking challenges, data gaps, reporting needs)\n"
-        f"- budget_availability (investment, spending, financial capacity)\n"
+        f"- deal_size (company size, revenue, facilities, employees, financial capacity)\n"
         f"- urgency_timing (deadlines, timelines, target dates)\n"
-        f"- deal_size_potential (company size, revenue, facilities, employees)\n"
         f"- risk_factor (layoffs, cost-cutting, spending freezes)\n\n"
         f"Text:\n{combined_text[:2000]}"
     )
@@ -141,14 +140,15 @@ def _npu_batch_analyze(combined_text: str, company_name: str) -> list:
 
         valid_categories = {
             "regulatory_pressure", "executive_commitment", "measurement_gap",
-            "budget_availability", "urgency_timing", "deal_size_potential", "risk_factor"
+            "deal_size", "urgency_timing", "risk_factor"
         }
         category_map = {
-            "budget_signal": "budget_availability",
-            "deal_size_indicator": "deal_size_potential",
+            "budget_signal": "deal_size",
+            "deal_size_indicator": "deal_size",
+            "deal_size_potential": "deal_size",
+            "budget_availability": "deal_size",
+            "budget": "deal_size",
             "ceo_commitment": "executive_commitment",
-            "budget": "budget_availability",
-            "deal_size": "deal_size_potential",
             "executive": "executive_commitment",
             "regulatory": "regulatory_pressure",
             "measurement": "measurement_gap",
@@ -197,7 +197,7 @@ def _npu_extract(text: str, source_id: str) -> list:
         "Extract sustainability and business signals from this text. "
         "For each signal, output the category and a short quote. "
         "Categories: regulatory_pressure, executive_commitment, measurement_gap, "
-        "budget_availability, urgency_timing, deal_size_potential, risk_factor. "
+        "deal_size, urgency_timing, risk_factor. "
         "Format: CATEGORY: \"quote\"\n\n"
         f"Text: {text[:800]}"
     )
@@ -215,8 +215,11 @@ def _npu_extract(text: str, source_id: str) -> list:
         signals = []
         # Normalize category names (NPU may use variants)
         category_map = {
-            "budget_signal": "budget_availability",
-            "deal_size_indicator": "deal_size_potential",
+            "budget_signal": "deal_size",
+            "deal_size_indicator": "deal_size",
+            "deal_size_potential": "deal_size",
+            "budget_availability": "deal_size",
+            "budget": "deal_size",
             "ceo_commitment": "executive_commitment",
         }
         for line in lines:
@@ -290,10 +293,27 @@ def _keyword_extract(text: str, source_id: str) -> list:
                              "ghg inventory", "ghg protocol", "carbon measurement",
                              "life cycle assessment", "lca", "baseline emission",
                              "emission factor", "third-party verification",
-                             "assurance", "auditab"]),
-        # Budget Signal (only in positive context)
-        ("budget_availability", ["allocat", "earmark", "invest",
-                           "capital expenditure", "capex"]),
+                             "assurance", "auditab",
+                             "emissions report", "emission report", "carbon report",
+                             "environmental report", "sustainability data",
+                             "carbon disclos", "climate disclos", "esg disclos",
+                             "environmental disclos", "ghg emission", "greenhouse gas emission",
+                             "co2 emission", "carbon dioxide emission",
+                             "methane emission", "climate data", "emission reduct",
+                             "carbon intensit", "energy consumption", "energy usage",
+                             "renewable energy percent", "clean energy",
+                             "water usage", "water consumption", "waste diversion",
+                             "environmental metric", "sustainability metric",
+                             "cdp score", "cdp disclos", "climate score",
+                             "environmental footprint", "carbon offset",
+                             "verified emission", "reported emission",
+                             "environmental data", "sustainability disclos"]),
+        # Deal Size (merged budget + company size signals)
+        ("deal_size", ["allocat", "earmark", "invest",
+                       "capital expenditure", "capex",
+                       "billion", "facilities", "countries",
+                       "employees", "headcount",
+                       "revenue", "annual revenue", "market cap"]),
         # Urgency/Timing
         ("urgency_timing", ["by 2026", "by 2030", "by 2035", "by 2040", "by 2050",
                             "deadline", "timeline", "target date", "target year",
@@ -303,9 +323,6 @@ def _keyword_extract(text: str, source_id: str) -> list:
                             "roadmap", "action plan", "near-term",
                             "short-term goal", "interim target",
                             "committed to achiev", "on track"]),
-        # Deal Size Indicator
-        ("deal_size_potential", ["billion", "facilities", "countries",
-                                 "employees", "headcount"]),
         # Risk Factor
         ("risk_factor", ["layoff", "restructur", "cost-cutting", "spending freeze",
                          "paused all", "suspended", "decline", "operating loss",
@@ -314,7 +331,7 @@ def _keyword_extract(text: str, source_id: str) -> list:
 
     for category, keywords in patterns:
         # Skip positive categories if document is predominantly negative
-        if negative_context and category in ["budget_availability", "urgency_timing",
+        if negative_context and category in ["deal_size", "urgency_timing",
                                               "executive_commitment", "regulatory_pressure"]:
             continue
 
