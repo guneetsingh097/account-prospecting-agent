@@ -44,10 +44,10 @@ DIMENSIONS = [
         "name": "Regulatory Pressure",
         "description": "External regulatory forcing functions (CSRD, SEC climate rules, etc.)",
         "scoring": {
-            2: "Active deadline within 12 months + explicit compliance gap acknowledged",
-            1: "Regulatory mentions in filings but no urgent deadline",
-            0: "No regulatory pressure signals found",
-            -1: "Already compliant or exempt from regulations"
+            "8-10": "Active deadline + compliance gap + multiple regulatory frameworks",
+            "5-7": "Regulatory mentions in filings with some urgency",
+            "2-4": "General awareness of regulations, no specific pressure",
+            "0-1": "No regulatory pressure signals found"
         }
     },
     {
@@ -55,10 +55,10 @@ DIMENSIONS = [
         "name": "Executive Commitment",
         "description": "Leadership-level sustainability commitment signals",
         "scoring": {
-            2: "C-suite hire (CSO) + public pledge + board-level committee",
-            1: "Public pledge OR leadership hire (one signal)",
-            0: "Generic sustainability page but no leadership action",
-            -1: "Leadership actively deprioritizing sustainability"
+            "8-10": "C-suite hire (CSO) + public pledge + board committee + budget allocation",
+            "5-7": "Public pledges, sustainability reports, leadership mentions",
+            "2-4": "Generic sustainability page, minimal leadership action",
+            "0-1": "No executive commitment signals found"
         }
     },
     {
@@ -66,10 +66,10 @@ DIMENSIONS = [
         "name": "Measurement Gap",
         "description": "Acknowledgment they cannot currently track/measure emissions",
         "scoring": {
-            2: "Explicitly stated: 'we lack measurement infrastructure'",
-            1: "Partial reporting acknowledged (Scope 1&2 only, manual processes)",
-            0: "No mention of measurement challenges",
-            -1: "Already have comprehensive automated measurement"
+            "8-10": "Explicitly stated measurement gaps + active vendor evaluation",
+            "5-7": "Partial reporting, known gaps in Scope 3 or supply chain",
+            "2-4": "Some measurement but unclear completeness",
+            "0-1": "No mention of measurement challenges"
         }
     },
     {
@@ -77,10 +77,10 @@ DIMENSIONS = [
         "name": "Budget Availability",
         "description": "Financial capacity and willingness to invest",
         "scoring": {
-            2: "Specific budget allocated ($XM for sustainability tech) + revenue growing",
-            1: "Revenue growing, general investment language",
-            0: "Flat or unclear financial position",
-            -1: "Cost-cutting, spending freeze, declining revenue"
+            "8-10": "Specific budget allocated + revenue growing + investment language",
+            "5-7": "Revenue growing, general sustainability investment signals",
+            "2-4": "Stable finances but no specific sustainability budget",
+            "0-1": "No financial capacity signals"
         }
     },
     {
@@ -88,10 +88,10 @@ DIMENSIONS = [
         "name": "Urgency / Timing",
         "description": "Time pressure creating a 'buy now' forcing function",
         "scoring": {
-            2: "Hard deadline (CSRD Jan 2026) + vendor evaluation in progress",
-            1: "Soft timeline mentioned (pledges with dates)",
-            0: "No timing signals",
-            -1: "Explicitly paused all evaluations"
+            "8-10": "Hard deadline + active vendor evaluation + board mandate",
+            "5-7": "Pledges with dates, upcoming regulatory deadlines",
+            "2-4": "Soft timelines or general future commitments",
+            "0-1": "No timing signals"
         }
     },
     {
@@ -99,10 +99,10 @@ DIMENSIONS = [
         "name": "Deal Size Potential",
         "description": "Estimated annual contract value based on company size/complexity",
         "scoring": {
-            2: "Large enterprise ($5B+ revenue, 20+ facilities, multi-country) → $300K+ ACV",
-            1: "Mid-market ($1-5B revenue, 5-20 facilities) → $100-300K ACV",
-            0: "Small ($500M-1B, few facilities) → $50-100K ACV",
-            -1: "Very small or simple operations → <$50K ACV"
+            "8-10": "Large enterprise ($5B+ revenue, 20+ facilities, multi-country) → $300K+ ACV",
+            "5-7": "Mid-market ($1-5B revenue, 5-20 facilities) → $100-300K ACV",
+            "2-4": "Growing company ($500M-1B) → $50-100K ACV",
+            "0-1": "Small or simple operations → <$50K ACV"
         }
     }
 ]
@@ -141,38 +141,19 @@ def evaluate_fit(signals: list, company_data: dict) -> Generator[dict, None, Non
             "dimension_id": dim["id"],
             "dimension_name": dim["name"],
             "score": score,
-            "max_score": 2,
+            "max_score": 10,
             "evidence": evidence,
             "running_total": total_score,
             "tokens": estimated_tokens
         }}
 
-    # Apply risk factor penalty — risk signals reduce the total
-    risk_signals = [s for s in signals if s["category"] == "risk_factor"]
-    if risk_signals:
-        risk_penalty = min(len(risk_signals), 4)  # 1 point per risk signal, cap at 4
-        total_score -= risk_penalty
-        scores["risk_factor"] = {
-            "score": -risk_penalty,
-            "evidence": risk_signals[0]["quote"],
-            "name": "Risk Factors"
-        }
-        risk_tokens = max(1, (len(risk_signals[0]["quote"]) + len("Risk Factors")) // 4)
-        evaluation_metrics["dimension_tokens"] += risk_tokens
-        yield {"event": "dimension_scored", "data": {
-            "dimension_id": "risk_factor",
-            "dimension_name": "⚠️ Risk Factors",
-            "score": -risk_penalty,
-            "max_score": 0,
-            "evidence": risk_signals[0]["quote"],
-            "running_total": total_score,
-            "tokens": risk_tokens
-        }}
+    max_possible = len(DIMENSIONS) * 10  # 60
 
-    # Determine fit level
-    if total_score >= 8:
+    # Determine fit level based on percentage of max
+    score_pct = (total_score / max_possible) * 100 if max_possible > 0 else 0
+    if score_pct >= 75:
         fit_level = "HIGH"
-    elif total_score >= 4:
+    elif score_pct >= 45:
         fit_level = "MEDIUM"
     else:
         fit_level = "LOW"
@@ -184,7 +165,7 @@ def evaluate_fit(signals: list, company_data: dict) -> Generator[dict, None, Non
     yield {"event": "fit_determined", "data": {
         "fit_level": fit_level,
         "total_score": total_score,
-        "max_possible": 12,
+        "max_possible": max_possible,
         "acv_estimate": acv,
         "scores": scores
     }}
@@ -199,7 +180,7 @@ def evaluate_fit(signals: list, company_data: dict) -> Generator[dict, None, Non
 
 
 def _score_dimension(dimension: dict, dim_signals: list, company_data: dict) -> tuple:
-    """Score a single dimension based on available signals."""
+    """Score a single dimension 0-10 based on available signals."""
     dim_id = dimension["id"]
 
     if not dim_signals:
@@ -209,34 +190,55 @@ def _score_dimension(dimension: dict, dim_signals: list, company_data: dict) -> 
     quotes = [s["quote"] for s in dim_signals]
     best_quote = max(quotes, key=len) if quotes else ""
     combined_text = " ".join(quotes).lower()
+    num_signals = len(dim_signals)
 
-    # Negative sentiment check — if the signal contains cost-cutting/negative language,
-    # it should score negatively even if the keyword matched
+    # Negative sentiment check — only flag truly negative business context
     negative_indicators = ["layoff", "restructur", "cost-cutting", "spending freeze",
-                          "paused", "suspended", "decline", "loss", "reduced", "cancelled",
-                          "canceled", "cut ", "freeze", "discretionary spending"]
+                          "paused sustainability", "suspended sustainability",
+                          "cancelled program", "canceled program",
+                          "discretionary spending", "abandoned"]
     has_negative = any(neg in combined_text for neg in negative_indicators)
 
-    # For risk_factor dimension — negative signals score negative
+    # For risk_factor dimension — handled separately in evaluate_fit
     if dim_id == "risk_factor":
-        # Risk factor is inverted: presence of risk = negative for fit
-        # We DON'T add risk_factor to the total — instead we handle it specially
-        return 0, "No risk signals"  # Risk handled via other dimensions
+        return 0, "No risk signals"
 
-    # If negative language present in this dimension's signals, score down
-    if has_negative:
-        return -1, best_quote
-
-    # Heuristic scoring based on signal count and content
-    if len(dim_signals) >= 2:
-        return 2, best_quote
-    elif len(dim_signals) == 1:
-        strong_indicators = ["$", "million", "billion", "hire", "appoint",
-                            "deadline", "by 2026", "lack", "cannot", "commit"]
-        if any(ind in best_quote.lower() for ind in strong_indicators):
-            return 2, best_quote
+    # If overwhelmingly negative with very few signals, score low
+    if has_negative and num_signals <= 2:
         return 1, best_quote
-    return 0, "Insufficient evidence"
+
+    # Quality indicators boost the score
+    strong_indicators = ["$", "million", "billion", "hire", "appoint",
+                        "deadline", "by 2026", "by 2027", "by 2030",
+                        "commit", "pledge", "target", "goal", "invest",
+                        "report", "scope 1", "scope 2", "scope 3"]
+    quality_hits = sum(1 for ind in strong_indicators if ind in combined_text)
+
+    # 0-10 scoring: signal count + quality
+    # Base score from signal count (0-6 range)
+    if num_signals >= 10:
+        base = 6
+    elif num_signals >= 5:
+        base = 5
+    elif num_signals >= 3:
+        base = 4
+    elif num_signals >= 2:
+        base = 3
+    else:
+        base = 2
+
+    # Quality bonus (0-4 range)
+    if quality_hits >= 4:
+        quality_bonus = 4
+    elif quality_hits >= 2:
+        quality_bonus = 3
+    elif quality_hits >= 1:
+        quality_bonus = 2
+    else:
+        quality_bonus = 0
+
+    score = min(10, base + quality_bonus)
+    return score, best_quote
 
 
 def _estimate_acv(company_data: dict, fit_score: int) -> str:
@@ -319,12 +321,13 @@ def _generate_structured_narrative(company_data: dict, scores: dict, fit_level: 
     positives = []
     risks = []
     for dim_id, dim_data in scores.items():
-        if dim_data["score"] >= 2:
+        if dim_data["score"] >= 6:
             positives.append(f"{dim_data['name']}: {dim_data['evidence'][:80]}")
         elif dim_data["score"] < 0:
             risks.append(f"{dim_data['name']}: {dim_data['evidence'][:80]}")
 
-    narrative = f"{company_name} shows {fit_level} fit for Proseware's sustainability platform (score: {total_score}/12). "
+    max_possible = len(DIMENSIONS) * 10
+    narrative = f"{company_name} shows {fit_level} fit for Proseware's sustainability platform (score: {total_score}/{max_possible}). "
 
     if positives:
         narrative += f"Key strengths: {'; '.join(positives[:3])}. "

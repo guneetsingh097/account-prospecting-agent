@@ -6,7 +6,7 @@ watch the device collect public data, classify with NPU, evaluate fit
 with local SLM, and surface internal signals from WorkIQ.
 
 Three data lanes:
-  🌐 Web Collection (Brave Search + SEC EDGAR) → downloaded to device
+  🌐 Web Collection (Bing Search + SEC EDGAR) → downloaded to device
   ☁️ Internal Signals (WorkIQ / M365 Copilot) → queried from cloud
   💻 Local AI (NPU + SLM) → all inference on-device
 """
@@ -62,7 +62,7 @@ init_npu()
 init_foundry()
 
 print(f"\n[READY] Fictional companies loaded: {', '.join(list_companies())}")
-print(f"[READY] Brave API key: {'configured' if os.environ.get('BRAVE_SEARCH_API_KEY') else 'MISSING'}")
+print(f"[READY] Bing Search API key: {'configured' if os.environ.get('BING_SEARCH_API_KEY') else 'MISSING'}")
 print(f"[READY] Open http://localhost:5001 in your browser\n")
 
 

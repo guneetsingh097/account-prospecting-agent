@@ -2,7 +2,7 @@
 Collector module — fetches public data about a company.
 Dual-mode:
   - Fictional companies: returns pre-loaded documents from companies.py
-  - Real companies: hits Brave Search + SEC EDGAR live (parallel)
+  - Real companies: hits Bing Search + SEC EDGAR live (parallel)
 """
 
 import os
@@ -12,8 +12,8 @@ from typing import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from companies import get_company
 
-BRAVE_API_KEY = os.environ.get("BRAVE_SEARCH_API_KEY", "")
-BRAVE_HEADERS = {"X-Subscription-Token": BRAVE_API_KEY, "Accept": "application/json"}
+BING_API_KEY = os.environ.get("BING_SEARCH_API_KEY", "")
+BING_HEADERS = {"Ocp-Apim-Subscription-Key": BING_API_KEY}
 
 
 def collect(company_name: str) -> Generator[dict, None, None]:
@@ -101,9 +101,9 @@ def _collect_fictional(company: dict) -> Generator[dict, None, None]:
 
 
 def _collect_live(company_name: str) -> Generator[dict, None, None]:
-    """Collect live data via Brave Search API for real companies — parallel fetching."""
-    if not BRAVE_API_KEY:
-        yield {"event": "error", "data": {"message": "Brave API key not configured"}}
+    """Collect live data via Bing Search API for real companies — parallel fetching."""
+    if not BING_API_KEY:
+        yield {"event": "error", "data": {"message": "Bing Search API key not configured — add BING_SEARCH_API_KEY to .env"}}
         return
 
     yield {"event": "collection_started", "data": {
@@ -138,11 +138,11 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
         query, qtype = query_info
         try:
             if qtype == "news":
-                url = "https://api.search.brave.com/res/v1/news/search"
+                url = "https://api.bing.microsoft.com/v7.0/news/search"
             else:
-                url = "https://api.search.brave.com/res/v1/web/search"
+                url = "https://api.bing.microsoft.com/v7.0/search"
             resp = requests.get(url, params={"q": query, "count": 5},
-                              headers=BRAVE_HEADERS, timeout=6)
+                              headers=BING_HEADERS, timeout=6)
             if resp.status_code == 200:
                 return (query, qtype, resp.json())
             return (query, qtype, None)
@@ -166,9 +166,9 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
                 continue
 
             if qtype == "news":
-                results = data.get("results", [])
+                results = data.get("value", [])
             else:
-                results = data.get("web", {}).get("results", [])
+                results = data.get("webPages", {}).get("value", [])
 
             for r in results[:4]:  # Top 4 per query for broader coverage
                 source_counter += 1
@@ -176,11 +176,11 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
                 total_pages += pages
                 source = {
                     "id": f"{'NEWS' if qtype == 'news' else 'WEB'}-{source_counter}",
-                    "type": _classify_source_type(r.get("url", ""), r.get("title", "")) if qtype == "web" else "news_article",
-                    "title": r.get("title", "")[:100],
-                    "date": (r.get("page_age", "")[:10] or r.get("age", "recent")),
+                    "type": _classify_source_type(r.get("url", ""), r.get("name", "")) if qtype == "web" else "news_article",
+                    "title": r.get("name", "")[:100],
+                    "date": (r.get("datePublished", "")[:10] or "recent"),
                     "url": r.get("url", ""),
-                    "excerpt": r.get("description", "")[:500]
+                    "excerpt": r.get("snippet", r.get("description", ""))[:500]
                 }
                 all_sources.append(source)
                 yield {"event": "source_collected", "data": {
@@ -263,14 +263,23 @@ def _enrich_company_pages(existing_sources: list, company_name: str) -> list:
             candidate_urls.append(src.get("url", ""))
 
     # Also try common sustainability page patterns for the company
-    company_slug = company_name.lower().replace(" ", "").replace(",", "").replace(".", "")
-    common_paths = [
-        f"https://www.{company_slug}.com/sustainability",
-        f"https://www.{company_slug}.com/esg",
-        f"https://www.{company_slug}.com/environment",
-        f"https://www.{company_slug}.com/sustainable-impact",
-    ]
+    # Strip common suffixes like Inc., Corp., Ltd., Co.
+    import re as _re
+    clean_name = _re.sub(r'\b(inc|corp|corporation|ltd|llc|co|company|group|holdings)\b', '',
+                         company_name.lower()).strip(" ,.")
+    company_slug = clean_name.replace(" ", "").replace(",", "").replace(".", "")
+    # Also try first word as slug (e.g., "HP" from "HP Inc.")
+    first_word = clean_name.split()[0] if clean_name.split() else company_slug
+    slugs = list(dict.fromkeys([company_slug, first_word]))  # dedupe, preserve order
+    common_paths = []
+    for slug in slugs:
+        common_paths.extend([
+            f"https://www.{slug}.com/sustainability",
+            f"https://www.{slug}.com/esg",
+            f"https://www.{slug}.com/sustainable-impact",
+        ])
     candidate_urls.extend(common_paths)
+    print(f"[ENRICH] Candidates from search: {len(candidate_urls) - len(common_paths)}, guessed URLs: {len(common_paths)}, total: {len(candidate_urls)}")
 
     # Fetch up to 3 pages for content enrichment
     class TextExtractor(HTMLParser):
@@ -307,6 +316,7 @@ def _enrich_company_pages(existing_sources: list, company_name: str) -> list:
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Proseware-Research/1.0"
             })
             if resp.status_code != 200:
+                print(f"[ENRICH] Skip {url} — status {resp.status_code}")
                 continue
 
             parser = TextExtractor()
@@ -316,6 +326,7 @@ def _enrich_company_pages(existing_sources: list, company_name: str) -> list:
             if len(page_text) > 100:
                 seen_domains.add(domain)
                 fetched += 1
+                print(f"[ENRICH] Fetched {url} — {len(page_text)} chars")
                 enriched.append({
                     "type": "company_website",
                     "title": f"{company_name} — Sustainability Page ({domain})",
@@ -323,7 +334,11 @@ def _enrich_company_pages(existing_sources: list, company_name: str) -> list:
                     "url": url,
                     "excerpt": page_text
                 })
-        except Exception:
+            else:
+                print(f"[ENRICH] Skip {url} — page text too short ({len(page_text)} chars)")
+        except Exception as e:
+            print(f"[ENRICH] Error fetching {url}: {e}")
             continue
 
+    print(f"[ENRICH] Done — {len(enriched)} pages enriched")
     return enriched
