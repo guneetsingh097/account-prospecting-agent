@@ -1,28 +1,33 @@
 """
 Analyzer module — NPU classification + signal extraction.
-Uses phi-npu.exe (Windows AI / Phi Silica) for fast on-device inference.
-Falls back to simulated results if NPU is unavailable.
+Uses phi-npu.exe (Phi Silica on NPU) and falls back to keyword extraction.
 """
 
 import os
 import time
 import subprocess
+import sys
 from typing import Generator
+
+# Prevent console window flash when running as a packaged GUI app (PyInstaller --noconsole)
+_SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 PHI_NPU_EXE = r"C:\Users\gusing\AppData\Local\Microsoft\WindowsApps\phi-npu.exe"
 npu_available = False
 
 
 def init_npu():
-    """Check if phi-npu.exe is available."""
+    """Initialize NPU inference via phi-npu.exe (Phi Silica on NPU)."""
     global npu_available
+
     if not os.path.isfile(PHI_NPU_EXE):
         print("[NPU] phi-npu.exe not found — will simulate")
         return
     try:
         result = subprocess.run(
             [PHI_NPU_EXE, "chat", "hi"],
-            capture_output=True, text=True, timeout=15
+            capture_output=True, text=True, timeout=15,
+            creationflags=_SUBPROCESS_FLAGS
         )
         if result.returncode == 0 and result.stdout.strip():
             npu_available = True
@@ -34,70 +39,128 @@ def init_npu():
 def analyze_sources(sources: list, company_name: str, fictional: bool = False) -> Generator[dict, None, None]:
     """
     Process collected sources through NPU classification and signal extraction.
-    Yields events as each document is analyzed.
-    For fictional companies, uses keyword extraction for deterministic demo results.
-    For real companies, batches all documents into a single NPU analysis call.
+    Streams keyword extraction while phi-npu.exe runs in the background.
     """
+    from concurrent.futures import ThreadPoolExecutor
+
     total_signals = 0
     total_tokens = 0
     extracted_signals = []
 
+    engine_name = "NPU (Phi Silica)" if npu_available else "Local AI (keyword)"
+
     yield {"event": "analysis_started", "data": {
         "total_documents": len(sources),
-        "engine": "NPU (Phi Silica)" if npu_available else "Local AI (keyword)"
+        "engine": engine_name
     }}
 
-    # Phase 1: Fast keyword extraction per-doc (drives the streaming UI)
-    all_excerpts = []
-    for i, source in enumerate(sources):
-        excerpt = source.get("excerpt", "")
-        if not excerpt:
-            continue
+    valid_sources = [(i, s) for i, s in enumerate(sources) if s.get("excerpt", "")]
 
-        time.sleep(0.12)  # Brief pause for visual effect
-        doc_type = source.get("type", "unknown")
-        tokens_processed = len(excerpt) // 4
-        all_excerpts.append(excerpt[:500])
+    if npu_available and not fictional:
+        executor = ThreadPoolExecutor(max_workers=3)
 
-        signals = _keyword_extract(excerpt, source.get("id", f"DOC-{i}"))
-        total_signals += len(signals)
-        total_tokens += tokens_processed
-        extracted_signals.extend(signals)
+        # Use phi-npu.exe batch inference in two chunks while keyword extraction streams results.
+        mid = len(valid_sources) // 2
+        half1 = valid_sources[:mid]
+        half2 = valid_sources[mid:]
 
-        yield {"event": "document_analyzed", "data": {
-            "source_id": source.get("id", f"DOC-{i}"),
-            "title": source.get("title", "Unknown"),
-            "type": doc_type,
-            "signals_found": len(signals),
-            "signals": signals,
-            "progress": i + 1,
-            "total": len(sources),
-            "total_signals": total_signals,
-            "tokens_processed": tokens_processed
+        def _build_batch_text(batch):
+            texts = [f"[{s.get('id', 'DOC')}] {s.get('excerpt', '')[:400]}" for _, s in batch]
+            return "\n---\n".join(texts)
+
+        npu_futures = [
+            executor.submit(_npu_batch_analyze, _build_batch_text(half1), company_name),
+            executor.submit(_npu_batch_analyze, _build_batch_text(half2), company_name),
+        ]
+
+        # Stream docs immediately using fast keyword extraction while NPU runs in parallel.
+        for i, source in enumerate(sources):
+            excerpt = source.get("excerpt", "")
+            if not excerpt:
+                continue
+
+            time.sleep(0.08)  # Brief visual pacing
+            doc_type = source.get("type", "unknown")
+            tokens_processed = max(1, int(len(excerpt) / 3.5))
+
+            signals = _keyword_extract(excerpt, source.get("id", f"DOC-{i}"))
+            total_signals += len(signals)
+            total_tokens += tokens_processed
+            extracted_signals.extend(signals)
+
+            yield {"event": "document_analyzed", "data": {
+                "source_id": source.get("id", f"DOC-{i}"),
+                "title": source.get("title", "Unknown"),
+                "type": doc_type,
+                "signals_found": len(signals),
+                "signals": signals,
+                "progress": i + 1,
+                "total": len(sources),
+                "total_signals": total_signals,
+                "tokens_processed": tokens_processed
+            }}
+
+        # Wait for NPU to finish
+        yield {"event": "npu_verification", "data": {
+            "status": "running",
+            "message": "NPU finalizing deep classification...",
+            "result": "",
+            "tokens_processed": 0
         }}
 
-    # Phase 2: Single batched NPU analysis of all documents combined
-    if npu_available and all_excerpts and not fictional:
-        yield {"event": "npu_verification", "data": {"status": "running", "message": "NPU analyzing all collected documents..."}}
-        combined_text = "\n---\n".join(all_excerpts)
-        npu_tokens = len(combined_text) // 4
-        npu_signals = _npu_batch_analyze(combined_text, company_name)
-        total_tokens += npu_tokens
+        npu_signals_all = []
+        npu_tokens_total = 0
+        for future in npu_futures:
+            try:
+                signals, inp_tok, out_tok = future.result(timeout=120)
+                npu_signals_all.extend(signals)
+                npu_tokens_total += inp_tok + out_tok
+            except Exception as e:
+                print(f"[NPU] Batch error: {e}")
 
-        # Merge NPU signals with keyword signals (NPU may find signals keywords missed)
+        total_tokens += npu_tokens_total
+
+        # Merge NPU signals (add any new categories NPU found that keywords missed)
         existing_categories = {s["category"] for s in extracted_signals}
-        new_npu_signals = []
-        for s in npu_signals:
-            if s["category"] not in existing_categories:
-                new_npu_signals.append(s)
-                total_signals += 1
+        new_npu = [s for s in npu_signals_all if s["category"] not in existing_categories]
+        extracted_signals.extend(new_npu)
+        total_signals += len(new_npu)
 
-        extracted_signals.extend(new_npu_signals)
         yield {"event": "npu_verification", "data": {
             "status": "complete",
-            "result": f"NPU extracted {len(npu_signals)} signals, {len(new_npu_signals)} new categories found",
-            "tokens_processed": npu_tokens
+            "message": f"NPU deep classification complete",
+            "result": f"NPU confirmed {len(npu_signals_all)} signals, {len(new_npu)} additional categories found",
+            "tokens_processed": npu_tokens_total
         }}
+
+        executor.shutdown(wait=False)
+    else:
+        # Keyword fallback path (fictional companies or no NPU)
+        for i, source in enumerate(sources):
+            excerpt = source.get("excerpt", "")
+            if not excerpt:
+                continue
+
+            time.sleep(0.12)  # Brief pause for visual effect
+            doc_type = source.get("type", "unknown")
+            tokens_processed = max(1, int(len(excerpt) / 3.5))
+
+            signals = _keyword_extract(excerpt, source.get("id", f"DOC-{i}"))
+            total_signals += len(signals)
+            total_tokens += tokens_processed
+            extracted_signals.extend(signals)
+
+            yield {"event": "document_analyzed", "data": {
+                "source_id": source.get("id", f"DOC-{i}"),
+                "title": source.get("title", "Unknown"),
+                "type": doc_type,
+                "signals_found": len(signals),
+                "signals": signals,
+                "progress": i + 1,
+                "total": len(sources),
+                "total_signals": total_signals,
+                "tokens_processed": tokens_processed
+            }}
 
     # Debug: log signal categories
     cat_counts = {}
@@ -113,8 +176,9 @@ def analyze_sources(sources: list, company_name: str, fictional: bool = False) -
     }}
 
 
-def _npu_batch_analyze(combined_text: str, company_name: str) -> list:
-    """Single batched NPU call to analyze all collected documents at once. ~5-8s."""
+def _npu_batch_analyze(combined_text: str, company_name: str) -> tuple:
+    """Single batched NPU call to analyze all collected documents at once. ~5-8s.
+    Returns (signals_list, input_tokens, output_tokens)."""
     prompt = (
         f"You are analyzing business documents about {company_name} for sustainability sales prospecting.\n"
         f"Extract signals from ALL the text below. For each signal found, output one line:\n"
@@ -126,17 +190,22 @@ def _npu_batch_analyze(combined_text: str, company_name: str) -> list:
         f"- deal_size (company size, revenue, facilities, employees, financial capacity)\n"
         f"- urgency_timing (deadlines, timelines, target dates)\n"
         f"- risk_factor (layoffs, cost-cutting, spending freezes)\n\n"
-        f"Text:\n{combined_text[:2000]}"
+        f"Text:\n{combined_text[:1500]}"
     )
     try:
         result = subprocess.run(
             [PHI_NPU_EXE, "chat", prompt],
-            capture_output=True, text=True, timeout=30
+            capture_output=True, text=True, timeout=30,
+            creationflags=_SUBPROCESS_FLAGS
         )
         output = result.stdout.strip()
         lines = output.split("\n")
         if lines and lines[-1].startswith("[") and "Complete]" in lines[-1]:
             lines = lines[:-1]
+
+        # Count tokens: input from prompt, output from response lines
+        input_tokens = max(1, int(len(prompt) / 3.5))
+        output_tokens = max(1, int(len(output) / 3.5))
 
         valid_categories = {
             "regulatory_pressure", "executive_commitment", "measurement_gap",
@@ -172,11 +241,11 @@ def _npu_batch_analyze(combined_text: str, company_name: str) -> list:
                         "source_id": "NPU-BATCH",
                         "engine": "npu"
                     })
-        print(f"[NPU] Batch analysis found {len(signals)} signals")
-        return signals
+        print(f"[NPU] Batch analysis found {len(signals)} signals, {input_tokens}+{output_tokens} tokens")
+        return signals, input_tokens, output_tokens
     except Exception as e:
         print(f"[NPU] Batch analysis error: {e}")
-        return []
+        return [], 0, 0
 
 
 def _extract_signals(text: str, doc_type: str, source_id: str, use_npu: bool = True) -> list:
@@ -204,7 +273,8 @@ def _npu_extract(text: str, source_id: str) -> list:
     try:
         result = subprocess.run(
             [PHI_NPU_EXE, "chat", prompt],
-            capture_output=True, text=True, timeout=20
+            capture_output=True, text=True, timeout=20,
+            creationflags=_SUBPROCESS_FLAGS
         )
         output = result.stdout.strip()
         # Strip timing line

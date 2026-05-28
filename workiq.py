@@ -321,6 +321,8 @@ def _npu_generate_insight(company_name: str, signals: list) -> str:
     """Use NPU (Phi Silica) to generate a contextual engagement insight."""
     try:
         import subprocess
+        import sys
+        _flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         signal_summary = ", ".join(s["type"].replace("_", " ") for s in signals[:5])
         prompt = (
             f"In one sentence, summarize the sales engagement status for {company_name} "
@@ -329,7 +331,8 @@ def _npu_generate_insight(company_name: str, signals: list) -> str:
         )
         result = subprocess.run(
             ["phi-npu.exe", "--prompt", prompt],
-            capture_output=True, text=True, timeout=8
+            capture_output=True, text=True, timeout=8,
+            creationflags=_flags
         )
         if result.returncode == 0 and result.stdout.strip():
             insight = result.stdout.strip()

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account Prospecting Agent - Sustainability Suite — Proseware</title>
+    <title>Account Prospecting Assistant - Sustainability Suite — Proseware</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%234f8cff'/%3E%3Cstop offset='100%25' stop-color='%237c3aed'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ccircle cx='32' cy='32' r='18' fill='none' stroke='white' stroke-width='2.5' opacity='0.5'/%3E%3Ccircle cx='32' cy='32' r='11' fill='none' stroke='white' stroke-width='2.5' opacity='0.7'/%3E%3Ccircle cx='32' cy='32' r='4' fill='white'/%3E%3Cline x1='32' y1='10' x2='32' y2='18' stroke='white' stroke-width='2' opacity='0.6'/%3E%3Cline x1='32' y1='46' x2='32' y2='54' stroke='white' stroke-width='2' opacity='0.6'/%3E%3Cline x1='10' y1='32' x2='18' y2='32' stroke='white' stroke-width='2' opacity='0.6'/%3E%3Cline x1='46' y1='32' x2='54' y2='32' stroke='white' stroke-width='2' opacity='0.6'/%3E%3C/svg%3E">
     <style>
         :root {
@@ -660,7 +660,7 @@
 <body>
     <div class="header">
         <div class="header-logo" onclick="resetSearch()" style="cursor:pointer;" title="Home">⚡ Proseware</div>
-        <div class="header-subtitle">Account Prospecting Agent - Sustainability Suite <span style="font-size:11px; opacity:0.6; margin-left:6px;">v1.1</span></div>
+        <div class="header-subtitle">Account Prospecting Assistant - Sustainability Suite <span style="font-size:11px; opacity:0.6; margin-left:6px;">v1.1</span></div>
         <div class="header-badge">
             <div class="lane-badge lane-web">🌐 Web</div>
             <div class="lane-badge lane-cloud">☁️ Cloud</div>
@@ -671,7 +671,7 @@
     <div class="container">
         <!-- Search -->
         <div class="search-section" id="searchSection">
-            <h1>Account Prospecting Agent - Sustainability Suite</h1>
+            <h1>Account Prospecting Assistant - Sustainability Suite</h1>
             <p style="max-width: 560px; margin: 0 auto 24px; line-height: 1.8; font-size: 14px; color: var(--text-dim);">
                 Evaluate whether a company is a good fit for Proseware's sustainability platform.
                 The agent collects public data, analyzes it with on-device AI, and scores fit
@@ -860,7 +860,7 @@
             <div class="phase" id="phaseMetrics" style="display:none;">
                 <div class="phase-header">
                     <div class="phase-icon">📊</div>
-                    <div class="phase-title">AI Compute Summary</div>
+                    <div class="phase-title">Estimated AI Compute Summary</div>
                     <div class="phase-lane local">HYBRID AI METRICS</div>
                 </div>
                 <div class="phase-body">
@@ -904,12 +904,31 @@
                             </div>
                         </div>
                         <div style="background: var(--surface2); border-radius: 8px; padding: 12px; border: 1px solid var(--border);">
-                            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px;">Fleet-Scale Projection</div>
-                            <div style="font-size: 13px; color: var(--text-dim); line-height: 1.8;">
-                                <div>1,000 sellers × 100 prospects/day × 260 days</div>
-                                <div style="font-size: 20px; font-weight: 700; color: var(--green); margin: 4px 0;" id="metricProjection">$0 saved/year</div>
-                                <div style="font-size: 11px;">At $0 incremental inference cost per device</div>
+                            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px;">Fleet-Scale Projection</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+                                <div>
+                                    <label style="font-size: 10px; color: var(--text-dim); display: block; margin-bottom: 2px;">Sellers</label>
+                                    <input type="number" id="calcSellers" value="1000" min="1" style="width: 100%; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; text-align: center;" oninput="recalcFleet()">
+                                </div>
+                                <div>
+                                    <label style="font-size: 10px; color: var(--text-dim); display: block; margin-bottom: 2px;">Prospects/day</label>
+                                    <input type="number" id="calcProspects" value="100" min="1" style="width: 100%; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; text-align: center;" oninput="recalcFleet()">
+                                </div>
+                                <div>
+                                    <label style="font-size: 10px; color: var(--text-dim); display: block; margin-bottom: 2px;">Days/year</label>
+                                    <input type="number" id="calcDays" value="260" min="1" style="width: 100%; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; text-align: center;" oninput="recalcFleet()">
+                                </div>
                             </div>
+                            <div style="margin-bottom: 8px;">
+                                <label style="font-size: 10px; color: var(--text-dim); display: block; margin-bottom: 2px;">Cost per inference (cloud) $</label>
+                                <input type="number" id="calcCostPerToken" value="0.015" min="0" step="0.001" style="width: 100%; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; text-align: center;" oninput="recalcFleet()">
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 4px;" id="calcFormula">1,000 × 100 × 260 = 26,000,000 inferences/year</div>
+                            <div style="font-size: 20px; font-weight: 700; color: var(--green); margin: 4px 0;" id="metricProjection">$390,000 saved/year</div>
+                            <div style="font-size: 11px; color: var(--text-dim);">At $0 incremental inference cost per device</div>
+                        </div>
+                        <div style="font-size: 10px; color: var(--text-dim); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); line-height: 1.5; font-style: italic;">
+                            ⚠️ Estimates are hypothetical projections for illustrative purposes only. Actual costs vary based on model selection, token pricing, infrastructure, and usage patterns. This is not a guarantee of savings.
                         </div>
                     </div>
                 </div>
@@ -1085,7 +1104,23 @@
             document.getElementById('metricCloud').textContent = computeMetrics.cloudInferences + ' calls';
 
             const costPerRun = parseFloat(costSaved);
-            const annualSaved = Math.round(1000 * 100 * 260 * costPerRun);
+            // Update the cost-per-inference default if we have a real value from the run
+            if (costPerRun > 0) {
+                document.getElementById('calcCostPerToken').value = costPerRun.toFixed(4);
+            }
+            recalcFleet();
+        }
+
+        function recalcFleet() {
+            const sellers = parseInt(document.getElementById('calcSellers').value) || 0;
+            const prospects = parseInt(document.getElementById('calcProspects').value) || 0;
+            const days = parseInt(document.getElementById('calcDays').value) || 0;
+            const costPer = parseFloat(document.getElementById('calcCostPerToken').value) || 0;
+            const totalInferences = sellers * prospects * days;
+            const annualSaved = Math.round(totalInferences * costPer);
+            document.getElementById('calcFormula').textContent =
+                sellers.toLocaleString() + ' × ' + prospects.toLocaleString() + ' × ' + days.toLocaleString() +
+                ' = ' + totalInferences.toLocaleString() + ' inferences/year';
             document.getElementById('metricProjection').textContent = '$' + annualSaved.toLocaleString() + ' saved/year';
         }
 
@@ -1520,7 +1555,6 @@
             es.addEventListener('analysis_started', (e) => {
                 const d = JSON.parse(e.data);
                 document.getElementById('phaseAnalysis').classList.add('active');
-                document.getElementById('evalStatus').textContent = `Engine: ${d.engine}`;
                 document.getElementById('analysisProgress').style.display = 'block';
                 document.getElementById('analysisProgressBar').classList.remove('waiting');
                 document.getElementById('analysisProgressBar').style.width = '5%';
@@ -1562,7 +1596,12 @@
 
             es.addEventListener('npu_verification', (e) => {
                 const d = JSON.parse(e.data);
-                if (d.status === 'complete') {
+                if (d.status === 'running') {
+                    document.getElementById('analysisStatus').innerHTML = '<span class="pulsing">⚡ NPU batch processing all documents...</span>';
+                    document.getElementById('analysisProgressBar').style.width = '85%';
+                } else if (d.status === 'complete') {
+                    document.getElementById('analysisStatus').innerHTML = '⚡ NPU batch complete — ' + (d.result || '');
+                    document.getElementById('analysisProgressBar').style.width = '95%';
                     computeMetrics.npuCalls += 1;
                     computeMetrics.localInferences += 1;
                     computeMetrics.tokensLocal += d.tokens_processed || 0;
@@ -1577,12 +1616,6 @@
                 document.getElementById('analysisProgressBar').style.animation = 'none';
                 document.getElementById('analysisStatus').innerHTML = '✓ Analysis complete';
                 document.getElementById('analysisStatus').style.color = 'var(--green, #4ade80)';
-                // Immediately show eval phase is starting
-                document.getElementById('phaseEvaluation').classList.add('active');
-                document.getElementById('evalStatus').innerHTML = '<span class="dot"></span> Preparing fit evaluation...';
-                document.getElementById('evalProgress').style.display = 'block';
-                document.getElementById('evalProgressBar').classList.remove('waiting');
-                document.getElementById('evalProgressBar').style.width = '10%';
             });
 
             es.addEventListener('workiq_started', () => {
@@ -1636,7 +1669,7 @@
             es.addEventListener('evaluation_started', () => {
                 document.getElementById('phaseEvaluation').classList.add('active');
                 document.getElementById('phaseMetrics').style.display = 'block';
-                document.getElementById('evalStatus').textContent = 'Scoring fit dimensions...';
+                document.getElementById('evalStatus').innerHTML = '<span class="pulsing">Scoring fit dimensions...</span>';
                 document.getElementById('evalProgress').style.display = 'block';
                 document.getElementById('evalProgressBar').classList.remove('waiting');
                 document.getElementById('evalProgressBar').style.width = '20%';
@@ -1698,13 +1731,25 @@
 
             es.addEventListener('narrative_token', (e) => {
                 const d = JSON.parse(e.data);
+                const narrative = document.getElementById('narrative');
+                if (d.status === 'thinking') {
+                    narrative.innerHTML = '<span style="color: var(--text-dim);">SLM reasoning<span class="cursor"></span></span>';
+                    return;
+                }
                 computeMetrics.tokensLocal += d.tokens || 0;
                 updateMetricsUI();
-                const narrative = document.getElementById('narrative');
+                // Clear thinking indicator on first real token
+                if (narrative.querySelector('span[style]')) {
+                    narrative.innerHTML = '';
+                }
                 const cursor = narrative.querySelector('.cursor');
                 if (cursor) cursor.remove();
-                narrative.innerHTML += d.token;
-                narrative.innerHTML += '<span class="cursor"></span>';
+                // Strip any HTML tags from token to ensure plain text only
+                const clean = d.token.replace(/<[^>]*>/g, '');
+                narrative.appendChild(document.createTextNode(clean));
+                const newCursor = document.createElement('span');
+                newCursor.className = 'cursor';
+                narrative.appendChild(newCursor);
             });
 
             es.addEventListener('narrative_complete', () => {

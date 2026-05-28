@@ -1,23 +1,38 @@
 """
-Evaluator module — SLM (Foundry Local) fit evaluation with streaming.
-Scores each dimension of the fit rubric and generates an evidence-based assessment.
+Evaluator module — NPU + SLM fit evaluation with streaming.
+Scores each dimension using phi-npu.exe (Phi Silica) and generates an evidence-based assessment.
 """
 
 import os
-import json
 import time
+import subprocess
+import platform
 from typing import Generator
+
+# NPU subprocess flags (no console window on Windows)
+_SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
+
+# NPU executable (legacy fallback)
+PHI_NPU_EXE = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WindowsApps", "phi-npu.exe")
+npu_eval_available = os.path.exists(PHI_NPU_EXE)
 
 # Foundry Local (OpenAI-compatible)
 foundry_ok = False
 client = None
 model_id = None
 
+
 def init_foundry():
-    """Initialize Foundry Local for SLM inference (non-blocking)."""
-    global foundry_ok, client, model_id
+    """Initialize evaluation engine and local SLM fallback."""
+    global foundry_ok, client, model_id, npu_eval_available
     import threading
 
+    # Use phi-npu.exe (Phi Silica) — proven to work on this hardware
+    if os.path.exists(PHI_NPU_EXE):
+        npu_eval_available = True
+        print("[EVAL] phi-npu.exe (Phi Silica) ready for scoring")
+
+    # Fallback to Foundry Local
     def _init():
         global foundry_ok, client, model_id
         try:
@@ -42,7 +57,7 @@ DIMENSIONS = [
     {
         "id": "regulatory_pressure",
         "name": "Regulatory Pressure",
-        "description": "External regulatory forcing functions (CSRD, SEC climate rules, etc.)",
+        "description": "US federal and state government pressure to improve sustainability reporting and reduce emissions",
         "max_score": 10,
         "scoring": {
             "8-10": "Active deadline + compliance gap + multiple regulatory frameworks",
@@ -54,7 +69,7 @@ DIMENSIONS = [
     {
         "id": "executive_commitment",
         "name": "Executive Commitment",
-        "description": "Leadership-level sustainability commitment signals",
+        "description": "CEO or executive-level public commitment to sustainability goals",
         "max_score": 10,
         "scoring": {
             "8-10": "C-suite hire (CSO) + public pledge + board committee + budget allocation",
@@ -66,7 +81,7 @@ DIMENSIONS = [
     {
         "id": "measurement_gap",
         "name": "Measurement Gap",
-        "description": "Acknowledgment they cannot currently track/measure emissions",
+        "description": "Data or measurements they are not collecting today — gaps our software can fill",
         "max_score": 10,
         "scoring": {
             "8-10": "Explicitly stated measurement gaps + active vendor evaluation",
@@ -78,7 +93,7 @@ DIMENSIONS = [
     {
         "id": "deal_size",
         "name": "Deal Size",
-        "description": "Estimated annual contract value based on company size, revenue, and complexity",
+        "description": "Size of the company's US footprint — revenue, facilities, employees",
         "max_score": 10,
         "scoring": {
             "8-10": "Large enterprise ($5B+ revenue, 20+ facilities, multi-country) → $300K+ ACV",
@@ -90,7 +105,7 @@ DIMENSIONS = [
     {
         "id": "urgency_timing",
         "name": "Urgency / Timing",
-        "description": "Time pressure creating a 'buy now' forcing function",
+        "description": "Climate goals, pledges, or regulatory deadlines creating pressure to act now",
         "max_score": 10,
         "scoring": {
             "8-10": "Hard deadline + active vendor evaluation + board mandate",
@@ -102,7 +117,7 @@ DIMENSIONS = [
     {
         "id": "internal_engagement",
         "name": "Internal Engagement",
-        "description": "Internal signals from Microsoft WorkIQ — content downloads, webinars, emails, meetings, site visits",
+        "description": "How engaged this account is with our sellers and marketing content (emails, webinars, meetings, downloads)",
         "max_score": 50,
         "scoring": {
             "35-50": "Multi-channel engagement: meetings booked, content consumed, Teams discussions, site visits",
@@ -114,15 +129,98 @@ DIMENSIONS = [
 ]
 
 
+def _npu_score_dimensions(signals: list, company_data: dict) -> dict:
+    """Use phi-npu.exe to score all fit dimensions in a single batch call.
+    Returns dict of {dim_id: {"score": int, "evidence": str}}."""
+    company_name = company_data.get("name", "the company")
+
+    # Build signal summary for prompts
+    signal_summary = {}
+    for s in signals:
+        cat = s.get("category", "unknown")
+        if cat not in signal_summary:
+            signal_summary[cat] = []
+        if len(signal_summary[cat]) < 3:
+            signal_summary[cat].append(s.get("quote", "")[:80])
+
+    signal_text = ""
+    for cat, quotes in signal_summary.items():
+        signal_text += f"{cat}: {'; '.join(quotes)}\n"
+
+    # Use phi-npu.exe for scoring
+    prompt = (
+        f"Score {company_name} on sustainability platform fit. For each dimension, output: DIMENSION|SCORE|REASON\n"
+        f"Score 0-10. Dimensions: regulatory_pressure, executive_commitment, measurement_gap, deal_size, urgency_timing\n\n"
+        f"Signals found:\n{signal_text[:1200]}\n\n"
+        f"Output one line per dimension:"
+    )
+
+    try:
+        result = subprocess.run(
+            [PHI_NPU_EXE, "chat", prompt],
+            capture_output=True, text=True, timeout=30,
+            creationflags=_SUBPROCESS_FLAGS
+        )
+        output = result.stdout.strip()
+        lines = output.split("\n")
+        if lines and lines[-1].startswith("[") and "Complete]" in lines[-1]:
+            lines = lines[:-1]
+
+        input_tokens = max(1, int(len(prompt) / 3.5))
+        output_tokens = max(1, int(len(output) / 3.5))
+        print(f"[NPU-EVAL] Scored dimensions: {input_tokens}+{output_tokens} tokens")
+
+        valid_dims = {"regulatory_pressure", "executive_commitment", "measurement_gap", "deal_size", "urgency_timing"}
+        dim_map = {
+            "regulatory": "regulatory_pressure",
+            "executive": "executive_commitment",
+            "measurement": "measurement_gap",
+            "deal": "deal_size",
+            "urgency": "urgency_timing",
+        }
+        npu_scores = {}
+
+        for line in lines:
+            line = line.strip().lstrip("- ")
+            parts = line.split("|")
+            if len(parts) >= 3:
+                dim_id = parts[0].strip().lower().replace(" ", "_")
+                for prefix, full_id in dim_map.items():
+                    if prefix in dim_id:
+                        dim_id = full_id
+                        break
+                if dim_id not in valid_dims:
+                    continue
+                try:
+                    score = int(parts[1].strip().split("/")[0].strip())
+                    score = max(0, min(10, score))
+                except (ValueError, IndexError):
+                    continue
+                reason = parts[2].strip()[:200]
+                npu_scores[dim_id] = {"score": score, "evidence": reason}
+
+        return npu_scores
+
+    except Exception as e:
+        print(f"[NPU-EVAL] Scoring error: {e}")
+        return {}
+
+
 def evaluate_fit(signals: list, company_data: dict, engagement_data: dict = None) -> Generator[dict, None, None]:
     """
     Evaluate company fit using collected signals.
     Yields streaming events: dimension scores, then overall assessment.
+    Uses NPU scoring when available.
+    Overlaps narrative generation with dimension display for speed.
     engagement_data: dict with 'score', 'level', 'signals' from WorkIQ
     """
+    import threading
+
+    engine_name = "NPU (Phi Silica)" if npu_eval_available else "Structured Evaluation"
+
     yield {"event": "evaluation_started", "data": {
         "dimensions": len(DIMENSIONS),
-        "engine": "SLM (Foundry Local)" if foundry_ok else "Structured Evaluation"
+        "engine": engine_name
     }}
 
     # Score each dimension
@@ -136,12 +234,61 @@ def evaluate_fit(signals: list, company_data: dict, engagement_data: dict = None
         "total_evaluation_tokens": 0
     }
 
+    # Use NPU to score all dimensions at once (single call for speed)
+    npu_scores = {}
+    if npu_eval_available and signals:
+        npu_scores = _npu_score_dimensions(signals, company_data)
+
+    # Start narrative NPU call in background (overlaps with dimension UI stagger)
+    narrative_result = {"text": None, "tokens": (0, 0)}
+    if npu_eval_available:
+        def _bg_narrative():
+            """Pre-generate narrative while dimensions display."""
+            company_name = company_data.get("name", "the company")
+            est_total = sum(d.get("score", 5) for d in npu_scores.values())
+            est_level = "HIGH" if est_total >= 35 else "MEDIUM" if est_total >= 20 else "LOW"
+            dim_summary = [f"{d.get('evidence', '')[:40]}" for d in npu_scores.values()]
+
+            prompt = (
+                f"Write 2-3 sentences about why {company_name} is a {est_level} fit for a sustainability software platform. "
+                f"Key findings: {'; '.join(dim_summary[:3])}. "
+                f"Be specific to {company_name}. No markdown or formatting."
+            )
+
+            try:
+                result = subprocess.run(
+                    [PHI_NPU_EXE, "chat", prompt],
+                    capture_output=True, text=True, timeout=30,
+                    creationflags=_SUBPROCESS_FLAGS
+                )
+                output = result.stdout.strip()
+                lines = output.split("\n")
+                if lines and lines[-1].startswith("[") and "Complete]" in lines[-1]:
+                    lines = lines[:-1]
+                text = " ".join(lines).strip()
+                import re
+                text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+                text = re.sub(r'\*([^*]+)\*', r'\1', text)
+                text = re.sub(r'<[^>]*>', '', text)
+                input_tokens = max(1, int(len(prompt) / 3.5))
+                output_tokens = max(1, int(len(text) / 3.5))
+                narrative_result["text"] = text
+                narrative_result["tokens"] = (input_tokens, output_tokens)
+            except Exception as e:
+                print(f"[NPU-EVAL] BG narrative error: {e}")
+
+        narrative_thread = threading.Thread(target=_bg_narrative, daemon=True)
+        narrative_thread.start()
+
     for dim in DIMENSIONS:
         dim_max = dim.get("max_score", 10)
         max_possible += dim_max
 
         if dim["id"] == "internal_engagement":
             score, evidence = _score_internal_engagement(engagement_data)
+        elif dim["id"] in npu_scores:
+            score = npu_scores[dim["id"]]["score"]
+            evidence = npu_scores[dim["id"]]["evidence"]
         else:
             dim_signals = [s for s in signals if s["category"] == dim["id"]]
             score, evidence = _score_dimension(dim, dim_signals, company_data)
@@ -151,6 +298,7 @@ def evaluate_fit(signals: list, company_data: dict, engagement_data: dict = None
         estimated_tokens = max(1, (len(evidence) + len(dim["name"]) + len(dim["description"])) // 4)
         evaluation_metrics["dimension_tokens"] += estimated_tokens
 
+        time.sleep(0.15)  # Stagger dimension reveals for visual feedback
         yield {"event": "dimension_scored", "data": {
             "dimension_id": dim["id"],
             "dimension_name": dim["name"],
@@ -161,9 +309,7 @@ def evaluate_fit(signals: list, company_data: dict, engagement_data: dict = None
             "tokens": estimated_tokens
         }}
 
-    # max_possible already calculated in loop above (100)
-
-    # Determine fit level based on percentage of max
+    # Determine fit level
     score_pct = (total_score / max_possible) * 100 if max_possible > 0 else 0
     if score_pct >= 75:
         fit_level = "HIGH"
@@ -172,10 +318,8 @@ def evaluate_fit(signals: list, company_data: dict, engagement_data: dict = None
     else:
         fit_level = "LOW"
 
-    # Estimate ACV
     acv = _estimate_acv(company_data, total_score)
 
-    # Stream the fit narrative
     yield {"event": "fit_determined", "data": {
         "fit_level": fit_level,
         "total_score": total_score,
@@ -186,8 +330,20 @@ def evaluate_fit(signals: list, company_data: dict, engagement_data: dict = None
 
     evaluation_metrics["total_evaluation_tokens"] = evaluation_metrics["dimension_tokens"]
 
-    # Generate streaming narrative
-    if foundry_ok:
+    # Wait for background narrative (should be done by now — ran during dimension display)
+    if npu_eval_available:
+        narrative_thread.join(timeout=10)
+        if narrative_result["text"] and len(narrative_result["text"]) >= 20:
+            input_tokens, output_tokens = narrative_result["tokens"]
+            evaluation_metrics["narrative_call"] = True
+            evaluation_metrics["narrative_tokens_generated"] = output_tokens
+            evaluation_metrics["narrative_input_tokens"] = input_tokens
+            evaluation_metrics["total_evaluation_tokens"] += input_tokens + output_tokens
+            yield {"event": "narrative_token", "data": {"token": narrative_result["text"], "tokens": output_tokens}}
+            yield {"event": "narrative_complete", "data": {"evaluation_metrics": evaluation_metrics}}
+        else:
+            yield from _generate_structured_narrative(company_data, scores, fit_level, total_score, evaluation_metrics)
+    elif foundry_ok:
         yield from _stream_narrative(company_data, scores, fit_level, total_score, signals, evaluation_metrics)
     else:
         yield from _generate_structured_narrative(company_data, scores, fit_level, total_score, evaluation_metrics)
@@ -226,30 +382,32 @@ def _score_internal_engagement(engagement_data: dict) -> tuple:
 def _score_dimension(dimension: dict, dim_signals: list, company_data: dict) -> tuple:
     """Score a single dimension 0-10 based on available signals."""
     dim_id = dimension["id"]
+    company_name = company_data.get("name", "").lower()
 
     if not dim_signals:
         return 0, "No signals found"
 
-    # Score based on signal strength
-    quotes = [s["quote"] for s in dim_signals]
-    best_quote = max(quotes, key=len) if quotes else ""
-    combined_text = " ".join(quotes).lower()
-    num_signals = len(dim_signals)
+    # Filter signals — prefer those mentioning the target company
+    relevant_signals = [s for s in dim_signals if company_name and company_name.split()[0].lower() in s.get("quote", "").lower()]
+    if not relevant_signals:
+        relevant_signals = dim_signals  # fallback to all if none mention company
 
-    # Negative sentiment check — only flag truly negative business context
+    quotes = [s["quote"] for s in relevant_signals]
+    combined_text = " ".join(quotes).lower()
+    num_signals = len(relevant_signals)
+
+    # Negative sentiment check
     negative_indicators = ["layoff", "restructur", "cost-cutting", "spending freeze",
                           "paused sustainability", "suspended sustainability",
                           "cancelled program", "canceled program",
                           "discretionary spending", "abandoned"]
     has_negative = any(neg in combined_text for neg in negative_indicators)
 
-    # For risk_factor dimension — handled separately in evaluate_fit
     if dim_id == "risk_factor":
         return 0, "No risk signals"
 
-    # If overwhelmingly negative with very few signals, score low
     if has_negative and num_signals <= 2:
-        return 1, best_quote
+        return 1, "Mixed signals — some negative business context detected"
 
     # Quality indicators boost the score
     strong_indicators = ["$", "million", "billion", "hire", "appoint",
@@ -259,7 +417,6 @@ def _score_dimension(dimension: dict, dim_signals: list, company_data: dict) -> 
     quality_hits = sum(1 for ind in strong_indicators if ind in combined_text)
 
     # 0-10 scoring: signal count + quality
-    # Base score from signal count (0-6 range)
     if num_signals >= 10:
         base = 6
     elif num_signals >= 5:
@@ -271,7 +428,6 @@ def _score_dimension(dimension: dict, dim_signals: list, company_data: dict) -> 
     else:
         base = 2
 
-    # Quality bonus (0-4 range)
     if quality_hits >= 4:
         quality_bonus = 4
     elif quality_hits >= 2:
@@ -282,7 +438,62 @@ def _score_dimension(dimension: dict, dim_signals: list, company_data: dict) -> 
         quality_bonus = 0
 
     score = min(10, base + quality_bonus)
-    return score, best_quote
+
+    # Generate human-readable evidence summary (not raw quotes)
+    evidence = _summarize_evidence(dim_id, num_signals, quality_hits, score, company_data)
+    return score, evidence
+
+
+def _summarize_evidence(dim_id: str, num_signals: int, quality_hits: int, score: int, company_data: dict) -> str:
+    """Generate a clean evidence summary instead of showing raw search quotes."""
+    company_name = company_data.get("name", "This company")
+
+    if dim_id == "regulatory_pressure":
+        if score >= 8:
+            return f"{num_signals} regulatory signals found — SEC climate disclosure rules, state-level mandates, and compliance deadlines creating urgency"
+        elif score >= 5:
+            return f"{num_signals} signals — regulatory mentions in public filings indicate growing compliance pressure"
+        elif score >= 2:
+            return f"{num_signals} signals — general regulatory awareness but no immediate compliance deadlines"
+        return "No regulatory pressure signals detected"
+
+    elif dim_id == "executive_commitment":
+        if score >= 8:
+            return f"{num_signals} signals — C-suite sustainability pledges, published goals, and dedicated leadership roles confirmed"
+        elif score >= 5:
+            return f"{num_signals} signals — public sustainability commitments and reporting from leadership"
+        elif score >= 2:
+            return f"{num_signals} signals — basic sustainability page or mentions, limited executive action"
+        return "No executive commitment signals found"
+
+    elif dim_id == "measurement_gap":
+        if score >= 8:
+            return f"{num_signals} signals — acknowledged gaps in emissions tracking, Scope 3 data incomplete, opportunity for platform to fill"
+        elif score >= 5:
+            return f"{num_signals} signals — partial emissions reporting with known gaps in supply chain or Scope 3 data"
+        elif score >= 2:
+            return f"{num_signals} signals — some sustainability data published but completeness unclear"
+        return "No measurement gap signals found"
+
+    elif dim_id == "deal_size":
+        if score >= 8:
+            return f"{num_signals} signals — large enterprise footprint with multi-billion revenue, significant facilities and workforce"
+        elif score >= 5:
+            return f"{num_signals} signals — mid-market presence with meaningful revenue and operational complexity"
+        elif score >= 2:
+            return f"{num_signals} signals — growing company with moderate US footprint"
+        return "Limited company size data available"
+
+    elif dim_id == "urgency_timing":
+        if score >= 8:
+            return f"{num_signals} signals — hard deadlines, published target dates, and active sustainability roadmap creating buy-now pressure"
+        elif score >= 5:
+            return f"{num_signals} signals — stated climate goals with specific target years (2030, 2035)"
+        elif score >= 2:
+            return f"{num_signals} signals — soft timelines or general future commitments noted"
+        return "No urgency or timing signals found"
+
+    return f"{num_signals} signals found across {quality_hits} quality indicators"
 
 
 def _estimate_acv(company_data: dict, fit_score: int) -> str:
@@ -311,45 +522,102 @@ def _estimate_acv(company_data: dict, fit_score: int) -> str:
     return base
 
 
+def _npu_narrative(company_data: dict, scores: dict, fit_level: str, total_score: int, evaluation_metrics: dict) -> Generator[dict, None, None]:
+    """Generate fit narrative using NPU (Phi Silica)."""
+    company_name = company_data.get("name", "the company")
+
+    # Build context from scored dimensions
+    dim_summary = []
+    for dim_id, dim_data in scores.items():
+        if dim_data["score"] > 0 and dim_id != "internal_engagement":
+            dim_summary.append(f"{dim_data['name']}: {dim_data['score']}/10")
+
+    prompt = (
+        f"Write 2-3 sentences about why {company_name} is a {fit_level} fit for a sustainability software platform. "
+        f"Scores: {', '.join(dim_summary)}. Total: {total_score}/100. "
+        f"Be specific to {company_name}. No markdown or formatting."
+    )
+
+    try:
+        yield {"event": "narrative_token", "data": {"token": "", "status": "thinking"}}
+        result = subprocess.run(
+            [PHI_NPU_EXE, "chat", prompt],
+            capture_output=True, text=True, timeout=30,
+            creationflags=_SUBPROCESS_FLAGS
+        )
+        output = result.stdout.strip()
+        # Strip timing line
+        lines = output.split("\n")
+        if lines and lines[-1].startswith("[") and "Complete]" in lines[-1]:
+            lines = lines[:-1]
+        narrative = " ".join(lines).strip()
+
+        if not narrative or len(narrative) < 20:
+            # Fallback to structured
+            yield from _generate_structured_narrative(company_data, scores, fit_level, total_score, evaluation_metrics)
+            return
+
+        # Strip any markdown formatting NPU might add
+        import re
+        narrative = re.sub(r'\*\*([^*]+)\*\*', r'\1', narrative)
+        narrative = re.sub(r'\*([^*]+)\*', r'\1', narrative)
+        narrative = re.sub(r'<[^>]*>', '', narrative)
+
+        input_tokens = max(1, int(len(prompt) / 3.5))
+        output_tokens = max(1, int(len(narrative) / 3.5))
+
+        evaluation_metrics["narrative_call"] = True
+        evaluation_metrics["narrative_tokens_generated"] = output_tokens
+        evaluation_metrics["narrative_input_tokens"] = input_tokens
+        evaluation_metrics["total_evaluation_tokens"] = evaluation_metrics["dimension_tokens"] + input_tokens + output_tokens
+
+        yield {"event": "narrative_token", "data": {"token": narrative, "tokens": output_tokens}}
+        yield {"event": "narrative_complete", "data": {"evaluation_metrics": evaluation_metrics}}
+        print(f"[NPU-EVAL] Narrative: {input_tokens}+{output_tokens} tokens")
+
+    except Exception as e:
+        print(f"[NPU-EVAL] Narrative error: {e}")
+        yield from _generate_structured_narrative(company_data, scores, fit_level, total_score, evaluation_metrics)
+
+
 def _stream_narrative(company_data: dict, scores: dict, fit_level: str, total_score: int, signals: list, evaluation_metrics: dict) -> Generator[dict, None, None]:
     """Stream fit narrative using Foundry Local SLM."""
     company_name = company_data.get("name", "the company")
 
-    # Build context for the SLM
+    # Build compact context — top 3 scoring dimensions only, capped evidence
+    scored_dims = [(d, s) for d, s in scores.items() if s["score"] > 0]
+    scored_dims.sort(key=lambda x: x[1]["score"], reverse=True)
     evidence_text = ""
-    for dim_id, dim_data in scores.items():
-        if dim_data["score"] > 0:
-            evidence_text += f"- {dim_data['name']} (score {dim_data['score']}/2): {dim_data['evidence']}\n"
-        elif dim_data["score"] < 0:
-            evidence_text += f"- ⚠️ {dim_data['name']} (RISK): {dim_data['evidence']}\n"
+    for dim_id, dim_data in scored_dims[:3]:
+        evidence_text += f"- {dim_data['name']}: {dim_data['evidence'][:100]}\n"
 
     prompt = (
-        f"You are a B2B sales analyst at Proseware (sustainability/carbon management platform). "
-        f"Write a 3-4 sentence executive summary of why {company_name} is a {fit_level} fit prospect. "
-        f"Score: {total_score}/12. Be specific and cite the evidence.\n\n"
-        f"Evidence:\n{evidence_text}\n\n"
-        f"Company: {company_name}, {company_data.get('industry', '')}, {company_data.get('revenue', '')} revenue, "
-        f"{company_data.get('headcount', '')} employees, {company_data.get('facilities', '')} facilities.\n\n"
-        f"Write the summary now:"
+        f"You are a B2B sales analyst. Write 2-3 sentences on why {company_name} is a {fit_level} fit "
+        f"for a sustainability platform. Score: {total_score}. Be specific.\n\n"
+        f"Evidence:\n{evidence_text}\n"
+        f"Summary:"
     )
 
     try:
         evaluation_metrics["narrative_call"] = True
+        yield {"event": "narrative_token", "data": {"token": "", "status": "thinking"}}
         stream = client.chat.completions.create(
             model=model_id,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=250,
+            max_tokens=100,
             stream=True
         )
-        generated_chars = 0
+        output_tokens = 0
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 token = chunk.choices[0].delta.content
-                generated_chars += len(token)
-                yield {"event": "narrative_token", "data": {"token": token, "tokens": max(1, len(token) // 4)}}
+                output_tokens += 1
+                yield {"event": "narrative_token", "data": {"token": token, "tokens": 1}}
 
-        evaluation_metrics["narrative_tokens_generated"] = max(1, generated_chars // 4) if generated_chars else 0
-        evaluation_metrics["total_evaluation_tokens"] = evaluation_metrics["dimension_tokens"] + evaluation_metrics["narrative_tokens_generated"]
+        input_tokens = max(1, int(len(prompt) / 3.5))
+        evaluation_metrics["narrative_tokens_generated"] = output_tokens
+        evaluation_metrics["narrative_input_tokens"] = input_tokens
+        evaluation_metrics["total_evaluation_tokens"] = evaluation_metrics["dimension_tokens"] + input_tokens + output_tokens
         yield {"event": "narrative_complete", "data": {"evaluation_metrics": evaluation_metrics}}
 
     except Exception as e:
@@ -358,42 +626,40 @@ def _stream_narrative(company_data: dict, scores: dict, fit_level: str, total_sc
 
 
 def _generate_structured_narrative(company_data: dict, scores: dict, fit_level: str, total_score: int, evaluation_metrics: dict) -> Generator[dict, None, None]:
-    """Generate a narrative without SLM (structured fallback)."""
+    """Generate a clean narrative without SLM (structured fallback)."""
     company_name = company_data.get("name", "This company")
 
-    # Build narrative from scores
-    positives = []
-    risks = []
+    # Identify top scoring dimensions (excluding internal_engagement for cleaner output)
+    scored_dims = []
     for dim_id, dim_data in scores.items():
-        if dim_data["score"] >= 6:
-            positives.append(f"{dim_data['name']}: {dim_data['evidence'][:80]}")
-        elif dim_data["score"] < 0:
-            risks.append(f"{dim_data['name']}: {dim_data['evidence'][:80]}")
+        if dim_id == "internal_engagement":
+            continue
+        if dim_data["score"] >= 5:
+            scored_dims.append(dim_data)
+    scored_dims.sort(key=lambda x: x["score"], reverse=True)
 
-    max_possible = len(DIMENSIONS) * 10
-    narrative = f"{company_name} shows {fit_level} fit for Proseware's sustainability platform (score: {total_score}/{max_possible}). "
-
-    if positives:
-        narrative += f"Key strengths: {'; '.join(positives[:3])}. "
-    if risks:
-        narrative += f"Risk factors: {'; '.join(risks[:2])}. "
+    # Build clean narrative
+    max_possible = sum(d.get("max_score", 10) for d in DIMENSIONS)
 
     if fit_level == "HIGH":
-        narrative += "Recommend immediate outreach — multiple buying signals confirmed."
+        narrative = f"{company_name} is a strong fit for Proseware's sustainability platform. "
+        if len(scored_dims) >= 2:
+            narrative += f"Strong signals across {scored_dims[0]['name'].lower()} and {scored_dims[1]['name'].lower()} indicate active need and budget alignment. "
+        narrative += "Multiple buying signals confirmed — recommend immediate outreach with a tailored sustainability ROI analysis."
     elif fit_level == "MEDIUM":
-        narrative += "Worth monitoring — some signals present but not all dimensions confirmed."
+        narrative = f"{company_name} shows moderate fit for Proseware's platform. "
+        if scored_dims:
+            narrative += f"Positive signals in {scored_dims[0]['name'].lower()}, but not all dimensions are confirmed. "
+        narrative += "Worth monitoring — consider nurture-track outreach and alert on regulatory trigger events."
     else:
-        narrative += "Not recommended for active pursuit at this time."
+        narrative = f"{company_name} shows limited fit at this time. "
+        narrative += "Insufficient buying signals across key dimensions. Revisit if regulatory pressure increases or leadership changes occur."
 
-    # Stream it token-by-token for visual effect
+    # Emit narrative all at once — fast and clean
     words = narrative.split(" ")
-    generated_chars = 0
-    for word in words:
-        time.sleep(0.03)
-        token = word + " "
-        generated_chars += len(token)
-        yield {"event": "narrative_token", "data": {"token": token, "tokens": max(1, len(token) // 4)}}
+    output_tokens = len(words)
+    yield {"event": "narrative_token", "data": {"token": narrative, "tokens": output_tokens}}
 
-    evaluation_metrics["narrative_tokens_generated"] = max(1, generated_chars // 4) if generated_chars else 0
-    evaluation_metrics["total_evaluation_tokens"] = evaluation_metrics["dimension_tokens"] + evaluation_metrics["narrative_tokens_generated"]
+    evaluation_metrics["narrative_tokens_generated"] = output_tokens
+    evaluation_metrics["total_evaluation_tokens"] = evaluation_metrics["dimension_tokens"] + output_tokens
     yield {"event": "narrative_complete", "data": {"evaluation_metrics": evaluation_metrics}}

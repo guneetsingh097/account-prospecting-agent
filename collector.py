@@ -6,6 +6,7 @@ Dual-mode:
 """
 
 import os
+import re
 import time
 import requests
 from typing import Generator
@@ -42,27 +43,23 @@ def _collect_fictional(company: dict) -> Generator[dict, None, None]:
         "revenue": company["revenue"],
         "headcount": company["headcount"],
         "hq": company["hq"],
-        "scope": "3 years (2022–2025)"
+        "scope": "2 years (2024–2026)"
     }}
 
-    # Simulate multiple search queries across 3 years of data
+    # Simulate search queries scoped to last 2 years of data
     queries = [
-        f"Searching: \"{company['name']}\" sustainability ESG report 2023-2025",
-        f"Searching: \"{company['name']}\" SEC 10-K 10-Q filings 2022-2024",
-        f"Searching: \"{company['name']}\" annual report sustainability disclosure",
+        f"Searching: \"{company['name']}\" sustainability ESG report 2024-2026",
+        f"Searching: \"{company['name']}\" SEC 10-K 10-Q filings 2024-2025",
+        f"Searching: \"{company['name']}\" annual report sustainability disclosure 2024",
         f"Searching: \"{company['name']}\" leadership CSO hire executive appointment",
-        f"Searching: \"{company['name']}\" earnings call transcript 2023-2025",
-        f"Searching: \"{company['name']}\" news press release ESG carbon",
+        f"Searching: \"{company['name']}\" earnings call transcript 2024-2026",
+        f"Searching: \"{company['name']}\" news press release ESG carbon 2025",
         f"Searching: \"{company['name']}\" regulatory compliance CSRD SEC climate",
         f"Searching: \"{company['name']}\" investor presentation capital allocation",
         f"Searching: \"{company['name']}\" carbon emissions Scope 1 2 3 reduction",
         f"Searching: \"{company['name']}\" supply chain sustainability audit",
-        f"Searching: \"{company['name']}\" board governance ESG committee",
         f"Searching: \"{company['name']}\" net-zero pledge SBTi commitment timeline",
-        f"Searching: \"{company['name']}\" CDP climate score disclosure rating",
-        f"Searching: \"{company['name']}\" investor shareholder activism ESG",
-        f"Searching: \"{company['name']}\" vendor technology sustainability platform evaluation",
-        f"Searching: \"{company['name']}\" executive compensation ESG metrics linked",
+        f"Searching: \"{company['name']}\" CDP climate score disclosure rating 2025",
     ]
 
     for i, query in enumerate(queries):
@@ -96,7 +93,7 @@ def _collect_fictional(company: dict) -> Generator[dict, None, None]:
         "total_sources": len(sources),
         "total_pages": total_pages,
         "total_queries": len(queries),
-        "scope_years": 3
+        "scope_years": 2
     }}
 
 
@@ -113,29 +110,27 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
         "revenue": "Researching...",
         "headcount": "Researching...",
         "hq": "Researching...",
-        "scope": "3 years (2022–2025)"
+        "scope": "2 years (2024–2026)"
     }}
 
-    # Broad set of queries covering sustainability, financials, governance, and news
+    # Queries scoped to last 2 years — sustainability, financials, governance, news
     queries = [
-        (f'"{company_name}" sustainability ESG carbon emissions report 2023 2024', "web"),
-        (f'"{company_name}" SEC 10-K annual report 2024 2023', "web"),
-        (f'"{company_name}" chief sustainability officer leadership climate hire', "web"),
-        (f'"{company_name}" revenue financials growth investment 2024', "web"),
-        (f'"{company_name}" net-zero carbon pledge CSRD compliance regulation', "web"),
-        (f'"{company_name}" earnings call transcript sustainability 2023 2024', "web"),
-        (f'"{company_name}" supply chain emissions Scope 3 supplier data', "web"),
-        (f'"{company_name}" board governance ESG committee oversight', "web"),
-        (f'"{company_name}" CDP climate score disclosure rating', "web"),
-        (f'"{company_name}" investor pressure climate shareholder proposal', "web"),
-        (f'"{company_name}" sustainability technology platform vendor', "web"),
+        (f'"{company_name}" sustainability ESG carbon emissions report 2024 2025', "web"),
+        (f'"{company_name}" SEC 10-K annual report 2024 2025', "web"),
+        (f'"{company_name}" chief sustainability officer leadership climate hire 2024', "web"),
+        (f'"{company_name}" revenue financials growth investment 2025', "web"),
+        (f'"{company_name}" net-zero carbon pledge CSRD compliance 2024 2025', "web"),
+        (f'"{company_name}" earnings call transcript sustainability 2024 2025', "web"),
+        (f'"{company_name}" supply chain emissions Scope 3 reduction 2024', "web"),
+        (f'"{company_name}" CDP climate score disclosure rating 2025', "web"),
         (f'"{company_name}" sustainability report PDF 2024 2025', "web"),
-        (f'"{company_name}" environmental impact water waste circular economy', "web"),
-        (f'"{company_name}" SBTi science based targets commitment', "web"),
-        (f'"{company_name}" proxy statement executive compensation ESG', "web"),
-        (f'{company_name} sustainability carbon emissions 2024 2025', "news"),
-        (f'{company_name} ESG regulation compliance 2025', "news"),
-        (f'{company_name} climate net-zero renewable energy 2025', "news"),
+        (f'"{company_name}" SBTi science based targets net-zero commitment', "web"),
+        (f'"{company_name}" board governance ESG committee oversight 2024 2025', "web"),
+        (f'"{company_name}" proxy statement executive compensation ESG 2024', "web"),
+        (f'"{company_name}" renewable energy water waste circular economy 2025', "web"),
+        (f'{company_name} sustainability carbon emissions 2025 2024', "news"),
+        (f'{company_name} ESG regulation compliance climate 2025', "news"),
+        (f'{company_name} net-zero renewable energy investment 2025', "news"),
     ]
 
     # Fire all queries in parallel
@@ -144,10 +139,12 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
         try:
             if qtype == "news":
                 url = "https://api.search.brave.com/res/v1/news/search"
+                params = {"q": query, "count": 8, "freshness": "py"}
             else:
                 url = "https://api.search.brave.com/res/v1/web/search"
-            resp = requests.get(url, params={"q": query, "count": 10},
-                              headers=BRAVE_HEADERS, timeout=8)
+                params = {"q": query, "count": 8, "freshness": "py"}
+            resp = requests.get(url, params=params,
+                              headers=BRAVE_HEADERS, timeout=5)
             if resp.status_code == 200:
                 return (query, qtype, resp.json())
             else:
@@ -167,7 +164,7 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
     source_counter = 0
     seen_urls = set()
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {executor.submit(_fetch, q): q for q in queries}
         for future in as_completed(futures):
             query, qtype, data = future.result()
@@ -193,7 +190,7 @@ def _collect_live(company_name: str) -> Generator[dict, None, None]:
                     "title": r.get("title", "")[:100],
                     "date": (r.get("page_age", "")[:10] or r.get("age", "recent")),
                     "url": url,
-                    "excerpt": r.get("description", "")[:500]
+                    "excerpt": re.sub(r'<[^>]*>', '', r.get("description", ""))[:500]
                 }
                 all_sources.append(source)
                 yield {"event": "source_collected", "data": {
@@ -294,7 +291,7 @@ def _enrich_company_pages(existing_sources: list, company_name: str) -> list:
     candidate_urls.extend(common_paths)
     print(f"[ENRICH] Candidates from search: {len(candidate_urls) - len(common_paths)}, guessed URLs: {len(common_paths)}, total: {len(candidate_urls)}")
 
-    # Fetch up to 3 pages for content enrichment
+    # Fetch up to 3 pages for content enrichment — in parallel
     class TextExtractor(HTMLParser):
         def __init__(self):
             super().__init__()
@@ -312,46 +309,52 @@ def _enrich_company_pages(existing_sources: list, company_name: str) -> list:
                 if len(cleaned) > 20:
                     self.text_parts.append(cleaned)
 
-    fetched = 0
+    # Dedupe candidates by domain, take first 5 unique-domain URLs to fetch in parallel
+    fetch_candidates = []
     for url in candidate_urls:
-        if fetched >= 3:
-            break
-        # Dedupe by domain
         try:
             domain = url.split("/")[2]
         except IndexError:
             continue
         if domain in seen_domains:
             continue
+        seen_domains.add(domain)
+        fetch_candidates.append((url, domain))
+        if len(fetch_candidates) >= 5:
+            break
 
+    def _fetch_page(url_domain):
+        url, domain = url_domain
         try:
-            resp = requests.get(url, timeout=6, headers={
+            resp = requests.get(url, timeout=3, headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Proseware-Research/1.0"
             })
             if resp.status_code != 200:
                 print(f"[ENRICH] Skip {url} — status {resp.status_code}")
-                continue
-
+                return None
             parser = TextExtractor()
             parser.feed(resp.text[:50000])
             page_text = " ".join(parser.text_parts)[:2000]
-
             if len(page_text) > 100:
-                seen_domains.add(domain)
-                fetched += 1
                 print(f"[ENRICH] Fetched {url} — {len(page_text)} chars")
-                enriched.append({
+                return {
                     "type": "company_website",
                     "title": f"{company_name} — Sustainability Page ({domain})",
                     "date": "current",
                     "url": url,
                     "excerpt": page_text
-                })
+                }
             else:
                 print(f"[ENRICH] Skip {url} — page text too short ({len(page_text)} chars)")
         except Exception as e:
             print(f"[ENRICH] Error fetching {url}: {e}")
-            continue
+        return None
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = executor.map(_fetch_page, fetch_candidates)
+        for result in results:
+            if result and len(enriched) < 3:
+                enriched.append(result)
 
     print(f"[ENRICH] Done — {len(enriched)} pages enriched")
     return enriched

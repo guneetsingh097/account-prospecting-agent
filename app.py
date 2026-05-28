@@ -54,7 +54,7 @@ prefetch_threads = {}
 # Startup
 # ---------------------------------------------------------------------------
 print("=" * 60)
-print("  Account Prospecting Agent — Hybrid AI Demo")
+print("  Account Prospecting Assistant — Hybrid AI Demo")
 print("  Proseware, Inc. | Sustainability Platform")
 print("=" * 60)
 
@@ -295,9 +295,8 @@ def api_research_events(job_id):
 
         if prefetched and not fictional:
             # Use prefetched data — emit events quickly to show progress
-            yield f"event: collection_started\ndata: {json.dumps({'company': company_name, 'mode': 'live (prefetched)', 'scope': '3 years (2022–2025)'})}\n\n"
-            # Emit query_sent events so the UI counter updates
-            num_queries = min(18, len(prefetched))
+            yield f"event: collection_started\ndata: {json.dumps({'company': company_name, 'mode': 'live (prefetched)', 'scope': '2 years (2024–2026)'})}\n\n"
+            num_queries = min(16, len(prefetched))
             for qi in range(num_queries):
                 yield f"event: query_sent\ndata: {json.dumps({'query': f'prefetched query {qi+1}', 'index': qi+1, 'total': num_queries})}\n\n"
             total_pages = 0
@@ -318,8 +317,8 @@ def api_research_events(job_id):
                     t.join(timeout=15)
                     prefetched = prefetch_cache.pop(company_name.lower(), None)
                     if prefetched:
-                        yield f"event: collection_started\ndata: {json.dumps({'company': company_name, 'mode': 'live (prefetched)', 'scope': '3 years (2022–2025)'})}\n\n"
-                        num_queries2 = min(18, len(prefetched))
+                        yield f"event: collection_started\ndata: {json.dumps({'company': company_name, 'mode': 'live (prefetched)', 'scope': '2 years (2024–2026)'})}\n\n"
+                        num_queries2 = min(16, len(prefetched))
                         for qi in range(num_queries2):
                             yield f"event: query_sent\ndata: {json.dumps({'query': f'prefetched query {qi+1}', 'index': qi+1, 'total': num_queries2})}\n\n"
                         total_pages = 0
@@ -399,7 +398,7 @@ def api_research_events(job_id):
 
         # Flush any remaining WorkIQ events (non-blocking)
         if not workiq_done:
-            workiq_thread.join(timeout=1)
+            workiq_thread.join(timeout=0.2)
             chunks, _ = _flush_workiq()
             for chunk in chunks:
                 yield chunk
@@ -434,6 +433,7 @@ def api_research_events(job_id):
             elif event["event"] == "narrative_complete":
                 evaluation_metrics = event["data"].get("evaluation_metrics", {})
                 compute_metrics["total_tokens_local"] += evaluation_metrics.get("narrative_tokens_generated", 0)
+                compute_metrics["total_tokens_local"] += evaluation_metrics.get("narrative_input_tokens", 0)
                 if evaluation_metrics.get("narrative_call"):
                     compute_metrics["slm_calls"] += 1
                     compute_metrics["local_inferences"] += 1

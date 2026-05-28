@@ -1,5 +1,9 @@
 dist/
 build/
+dist-x64/
+dist-x86/
+build-x64/
+build-x86/
 __pycache__/
 *.pyc
 .env
