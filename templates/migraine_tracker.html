@@ -71,11 +71,13 @@
         class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
       >Search</button>
     </div>
+    <p id="loc-status" class="mt-3 text-xs text-slate-500 hidden"></p>
     <p id="err" class="mt-3 text-sm text-red-600 hidden"></p>
   </div>
 
   <!-- ─── Loading skeleton ──────────────────────────────────────────────── -->
   <div id="loading" class="hidden space-y-4">
+    <p id="loading-msg" class="text-sm text-slate-500 text-center pb-2"></p>
     <div class="grid grid-cols-3 gap-4">
       <div class="skeleton h-32"></div>
       <div class="skeleton h-32"></div>
@@ -220,6 +222,41 @@ const THRESHOLDS = {
 
 const RISK_SCORE = { HIGH: 2, MEDIUM: 1, LOW: 0 };
 
+// ── Persistence ───────────────────────────────────────────────────────────
+const STORAGE_KEY = 'migraine_tracker_loc_v1';
+
+function saveLocation(lat, lon, name) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ lat, lon, name, ts: Date.now() })); }
+  catch (_) {}
+}
+
+function loadSavedLocation() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const item = JSON.parse(raw);
+    // Expire after 12 hours so stale coords don't persist across travel
+    if (Date.now() - item.ts > 12 * 3_600_000) { localStorage.removeItem(STORAGE_KEY); return null; }
+    return item;
+  } catch (_) { return null; }
+}
+
+function showLocStatus(msg, isGps = false) {
+  const el = document.getElementById('loc-status');
+  el.innerHTML = (isGps ? '📍 ' : '🕐 ') + msg +
+    ' &nbsp;<button onclick="clearSavedAndReset()" class="underline text-slate-400 hover:text-slate-600">Change</button>';
+  el.classList.remove('hidden');
+}
+
+function clearSavedAndReset() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  document.getElementById('loc-status').classList.add('hidden');
+  document.getElementById('city-input').value = '';
+  document.getElementById('city-input').focus();
+  const res = document.getElementById('results');
+  res.classList.remove('visible'); res.classList.add('hidden');
+}
+
 // ── State ─────────────────────────────────────────────────────────────────
 let pressureChart = null;
 
@@ -250,28 +287,43 @@ function fmtDayLabel(dateStr) {
 }
 
 // ── Geolocation ───────────────────────────────────────────────────────────
-function useMyLocation() {
-  if (!navigator.geolocation) { showErr('Geolocation not supported.'); return; }
+function useMyLocation(silent = false) {
+  if (!navigator.geolocation) {
+    if (!silent) showErr('Geolocation not supported by your browser.');
+    return false;
+  }
+  document.getElementById('loading-msg').textContent = 'Detecting your location…';
   navigator.geolocation.getCurrentPosition(
-    pos => doSearch(pos.coords.latitude, pos.coords.longitude),
-    () => showErr('Could not access GPS. Please type a city name.'),
+    pos => doSearch(pos.coords.latitude, pos.coords.longitude, /*fromGps=*/true),
+    () => {
+      if (!silent) showErr('GPS unavailable. Please type a city name.');
+    },
+    { timeout: 8000, maximumAge: 300_000 },
   );
+  return true;
 }
 
 // ── Main search entry point ───────────────────────────────────────────────
-async function doSearch(lat, lon) {
+async function doSearch(lat, lon, fromGps = false) {
   hideErr();
   const city = document.getElementById('city-input').value.trim();
-  if (!lat && !lon && !city) { showErr('Please enter a city name.'); return; }
+  if (lat == null && lon == null && !city) { showErr('Please enter a city name.'); return; }
 
-  document.getElementById('loading').classList.remove('hidden');
+  const loadingEl = document.getElementById('loading');
+  const loadingMsg = document.getElementById('loading-msg');
+  loadingEl.classList.remove('hidden');
+  if (!loadingMsg.textContent) loadingMsg.textContent = 'Fetching 7-day pressure forecast…';
   const res = document.getElementById('results');
   res.classList.remove('visible'); res.classList.add('hidden');
 
   try {
     let location;
     if (lat != null && lon != null) {
+      // Reverse-geocode to get a city name for the saved coords
       location = { name: city || 'My Location', country:'', admin1:'', latitude: lat, longitude: lon, timezone:'auto' };
+      // Try to resolve a proper place name via geocoding-by-proximity workaround:
+      // Open-Meteo geocoding is forward-only, so we label it by coords and
+      // let the weather timezone_abbreviation provide context.
     } else {
       location = await geocodeCity(city);
       if (!location) { showErr(`Could not find "${city}". Try a different city name.`); return; }
@@ -279,12 +331,19 @@ async function doSearch(lat, lon) {
 
     const weather = await fetchWeather(location.latitude, location.longitude, location.timezone);
     const analysed = analyse(weather, location);
+
+    // Persist so next visit is instant
+    const displayName = [location.name, location.country].filter(Boolean).join(', ');
+    saveLocation(location.latitude, location.longitude, displayName);
+    showLocStatus(displayName, fromGps);
+
     renderAll(analysed, location, weather);
 
   } catch (e) {
     showErr(`Error: ${e.message}. Please check your internet connection and try again.`);
   } finally {
-    document.getElementById('loading').classList.add('hidden');
+    loadingEl.classList.add('hidden');
+    loadingMsg.textContent = '';
   }
 }
 
@@ -724,6 +783,39 @@ function renderChart(cd) {
     },
   });
 }
+
+// ── Auto-detect location on page load ─────────────────────────────────────
+// Priority order:
+//  1. GPS (silent — no error shown if denied)
+//  2. localStorage saved location from previous visit
+//  3. Show blank search form and wait for user input
+document.addEventListener('DOMContentLoaded', () => {
+  const saved = loadSavedLocation();
+
+  if (navigator.geolocation) {
+    // Try GPS first; if it errors or times out, fall back to saved location
+    document.getElementById('loading-msg').textContent = 'Detecting your location…';
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        doSearch(pos.coords.latitude, pos.coords.longitude, /*fromGps=*/true);
+      },
+      () => {
+        // GPS denied/unavailable — try localStorage
+        if (saved) {
+          document.getElementById('loading-msg').textContent =
+            `Loading last location: ${saved.name}…`;
+          doSearch(saved.lat, saved.lon, false);
+        }
+        // else: leave form empty for manual entry
+      },
+      { timeout: 6000, maximumAge: 300_000 },
+    );
+  } else if (saved) {
+    // No GPS API at all — use saved location
+    doSearch(saved.lat, saved.lon, false);
+  }
+  // else: browser has no geolocation and no saved location → user types city
+});
 </script>
 </body>
 </html>
