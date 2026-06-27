@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Migraine Weather Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+    /* Risk badge fills */
+    .badge-HIGH   { background:#EF4444; color:#fff; }
+    .badge-MEDIUM { background:#F59E0B; color:#fff; }
+    .badge-LOW    { background:#22C55E; color:#fff; }
+
+    /* Tip left-border accent colours */
+    .tip-red    { border-left-color:#EF4444; background:#FEF2F2; }
+    .tip-orange { border-left-color:#F97316; background:#FFF7ED; }
+    .tip-yellow { border-left-color:#EAB308; background:#FEFCE8; }
+    .tip-green  { border-left-color:#22C55E; background:#F0FDF4; }
+    .tip-blue   { border-left-color:#3B82F6; background:#EFF6FF; }
+
+    /* Skeleton loader shimmer */
+    @keyframes shimmer { to { background-position: -200% 0; } }
+    .skeleton {
+      background: linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 50%,#e5e7eb 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 0.75rem;
+    }
+
+    /* Smooth show */
+    #results { opacity: 0; transition: opacity 0.4s ease; }
+    #results.visible { opacity: 1; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<!-- ─── Header ──────────────────────────────────────────────────────────── -->
+<div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
+  <div class="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
+    <span class="text-3xl select-none" aria-hidden="true">🧠</span>
+    <div>
+      <h1 class="text-xl font-bold text-slate-900 leading-tight">Migraine Weather Tracker</h1>
+      <p class="text-xs text-slate-500">Proactive barometric pressure alerts — plan ahead for your son's migraines</p>
+    </div>
+  </div>
+</div>
+
+<div class="max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+  <!-- ─── Search ────────────────────────────────────────────────────────── -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Your location</p>
+    <div class="flex flex-col sm:flex-row gap-3">
+      <input
+        id="city-input"
+        type="text"
+        placeholder="City — e.g. London, Toronto, Chicago, Sydney…"
+        class="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+        onkeydown="if(event.key==='Enter') doSearch()"
+      />
+      <button
+        onclick="useMyLocation()"
+        title="Use GPS location"
+        class="px-4 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1.5 justify-center"
+      >📍 My Location</button>
+      <button
+        onclick="doSearch()"
+        class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+      >Search</button>
+    </div>
+    <p id="err" class="mt-3 text-sm text-red-600 hidden"></p>
+  </div>
+
+  <!-- ─── Loading skeleton ──────────────────────────────────────────────── -->
+  <div id="loading" class="hidden space-y-4">
+    <div class="grid grid-cols-3 gap-4">
+      <div class="skeleton h-32"></div>
+      <div class="skeleton h-32"></div>
+      <div class="skeleton h-32"></div>
+    </div>
+    <div class="skeleton h-72"></div>
+    <div class="grid grid-cols-7 gap-2">
+      <div class="skeleton h-24"></div><div class="skeleton h-24"></div>
+      <div class="skeleton h-24"></div><div class="skeleton h-24"></div>
+      <div class="skeleton h-24"></div><div class="skeleton h-24"></div>
+      <div class="skeleton h-24"></div>
+    </div>
+    <div class="skeleton h-20"></div>
+    <div class="skeleton h-20"></div>
+  </div>
+
+  <!-- ─── Results ───────────────────────────────────────────────────────── -->
+  <div id="results" class="space-y-6">
+
+    <!-- Location + timestamp -->
+    <div class="flex items-end justify-between">
+      <div>
+        <h2 id="loc-name" class="text-2xl font-bold text-slate-900"></h2>
+        <p id="loc-sub" class="text-sm text-slate-500 mt-0.5"></p>
+      </div>
+      <p id="updated-at" class="text-xs text-slate-400 pb-1"></p>
+    </div>
+
+    <!-- ─── Current conditions row ──────────────────────────────────────── -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+      <!-- Pressure -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Pressure</p>
+        <p class="text-4xl font-extrabold text-slate-900" id="cur-pres">—</p>
+        <p class="text-sm text-slate-400 mt-1">hPa · sea level</p>
+        <p id="cur-trend" class="text-sm font-medium mt-3"></p>
+      </div>
+
+      <!-- Conditions -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Conditions</p>
+        <p class="text-lg font-bold text-slate-800" id="cur-cond">—</p>
+        <p class="text-3xl font-semibold text-slate-700 mt-2" id="cur-temp">—</p>
+      </div>
+
+      <!-- Risk level -->
+      <div id="risk-card" class="rounded-2xl border-2 p-5 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider mb-3 opacity-60">Current Migraine Risk</p>
+        <p class="text-4xl font-extrabold" id="cur-risk">—</p>
+        <p class="text-sm mt-2 opacity-70" id="cur-risk-note">—</p>
+      </div>
+    </div>
+
+    <!-- ─── Pressure chart ───────────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-1">
+        <h3 class="text-sm font-semibold text-slate-700">7-Day Barometric Pressure Forecast</h3>
+        <div class="flex items-center gap-4 text-xs text-slate-500">
+          <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full bg-red-500"></span>HIGH risk</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full bg-amber-400"></span>MEDIUM</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full bg-green-400"></span>LOW</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full bg-indigo-500"></span>Now</span>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">Dots are colour-coded by migraine trigger risk. Hover for details.</p>
+      <div style="position:relative; height:270px">
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+
+    <!-- ─── Upcoming alerts ──────────────────────────────────────────────── -->
+    <div>
+      <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Upcoming Pressure Alerts</h3>
+      <div id="events-list" class="space-y-3"></div>
+    </div>
+
+    <!-- ─── 7-day risk calendar ──────────────────────────────────────────── -->
+    <div>
+      <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">7-Day Risk Overview</h3>
+      <div id="daily-grid" class="grid grid-cols-7 gap-2"></div>
+    </div>
+
+    <!-- ─── Action plan ──────────────────────────────────────────────────── -->
+    <div>
+      <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Migraine Action Plan</h3>
+      <p class="text-xs text-slate-400 mb-4">
+        Guidance personalised to the upcoming pressure forecast — to help you plan ahead for your son.
+      </p>
+      <div id="tips-list" class="space-y-3"></div>
+    </div>
+
+    <!-- ─── Science explainer ────────────────────────────────────────────── -->
+    <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-5">
+      <h3 class="text-sm font-semibold text-indigo-800 mb-3">Why Barometric Pressure Triggers Migraines</h3>
+      <div class="space-y-2.5 text-sm text-indigo-900 leading-relaxed">
+        <p><strong>The mechanism:</strong> When barometric pressure drops or rises rapidly, the pressure differential between sinus cavities and the outside changes faster than the body can equalise. This triggers the trigeminal nerve — the primary pain pathway in migraines — and can dilate blood vessels in the brain.</p>
+        <p><strong>Falling vs rising:</strong> A falling pressure front (storms approaching) is the strongest trigger for most migraine sufferers. Rising pressure after a prolonged low can also cause rebound episodes. The <em>rate</em> of change matters more than the absolute level.</p>
+        <p><strong>Thresholds used here:</strong> HIGH = ≥4 hPa in 3 hours <em>or</em> ≥10 hPa in 24 hours. MEDIUM = ≥2.5 hPa / 3 h <em>or</em> ≥6 hPa / 24 h. Based on peer-reviewed research, though individual thresholds vary — tracking your son's migraine diary against this app will calibrate his personal threshold over time.</p>
+        <p><strong>Your planning advantage:</strong> Pressure changes typically begin 6–24 h before a weather front arrives. That window is your opportunity: early pre-medication, trigger avoidance, and ensuring good sleep the night before are most effective when started early.</p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="text-xs text-slate-400 pt-2 border-t border-slate-200">
+      Weather data provided by <a href="https://open-meteo.com" class="underline hover:text-slate-600" target="_blank" rel="noopener">Open-Meteo</a>
+      (open-source, free, no API key) · Fetched directly by your browser.
+      This app is informational only — always follow your neurologist's migraine management plan.
+    </p>
+  </div><!-- /#results -->
+
+</div><!-- /container -->
+
+<!-- ─── JavaScript ─────────────────────────────────────────────────────── -->
+<script>
+'use strict';
+
+// ── Open-Meteo endpoints (called directly by the browser) ─────────────────
+const GEOCODE_URL  = 'https://geocoding-api.open-meteo.com/v1/search';
+const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+
+// ── WMO weather code descriptions ─────────────────────────────────────────
+const WMO = {
+  0:'Clear sky', 1:'Mainly clear', 2:'Partly cloudy', 3:'Overcast',
+  45:'Foggy', 48:'Icy fog',
+  51:'Light drizzle', 53:'Moderate drizzle', 55:'Dense drizzle',
+  61:'Slight rain', 63:'Moderate rain', 65:'Heavy rain',
+  71:'Slight snow', 73:'Moderate snow', 75:'Heavy snow', 77:'Snow grains',
+  80:'Slight showers', 81:'Moderate showers', 82:'Violent showers',
+  85:'Slight snow showers', 86:'Heavy snow showers',
+  95:'Thunderstorm', 96:'Thunderstorm + hail', 99:'Severe thunderstorm',
+};
+
+// ── Migraine trigger thresholds (hPa change over the next N hours) ────────
+// Based on clinical research: >6 hPa/24h and >3 hPa/3h are significant.
+const THRESHOLDS = {
+  3:  { HIGH: 4.0,  MEDIUM: 2.5 },
+  6:  { HIGH: 6.0,  MEDIUM: 4.0 },
+  12: { HIGH: 8.0,  MEDIUM: 5.0 },
+  24: { HIGH: 10.0, MEDIUM: 6.0 },
+};
+
+const RISK_SCORE = { HIGH: 2, MEDIUM: 1, LOW: 0 };
+
+// ── State ─────────────────────────────────────────────────────────────────
+let pressureChart = null;
+
+// ── UI helpers ────────────────────────────────────────────────────────────
+function riskHex(r)    { return { HIGH:'#EF4444', MEDIUM:'#F59E0B', LOW:'#22C55E' }[r] ?? '#94A3B8'; }
+function riskBg(r)     { return { HIGH:'#FEF2F2', MEDIUM:'#FFFBEB', LOW:'#F0FDF4' }[r] ?? '#F8FAFC'; }
+function riskBorder(r) { return { HIGH:'#FECACA', MEDIUM:'#FDE68A', LOW:'#BBF7D0' }[r] ?? '#E2E8F0'; }
+
+function showErr(msg) {
+  const el = document.getElementById('err');
+  el.textContent = msg; el.classList.remove('hidden');
+}
+function hideErr() { document.getElementById('err').classList.add('hidden'); }
+
+function fmtEventTime(iso) {
+  const d = new Date(iso.includes('T') ? iso : iso.replace(' ','T'));
+  return d.toLocaleString('en-US', {
+    weekday:'short', month:'short', day:'numeric',
+    hour:'numeric', minute:'2-digit', hour12:true,
+  });
+}
+function fmtDayLabel(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  return {
+    wd: d.toLocaleDateString('en-US', { weekday:'short' }),
+    dt: d.toLocaleDateString('en-US', { day:'numeric', month:'short' }),
+  };
+}
+
+// ── Geolocation ───────────────────────────────────────────────────────────
+function useMyLocation() {
+  if (!navigator.geolocation) { showErr('Geolocation not supported.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => doSearch(pos.coords.latitude, pos.coords.longitude),
+    () => showErr('Could not access GPS. Please type a city name.'),
+  );
+}
+
+// ── Main search entry point ───────────────────────────────────────────────
+async function doSearch(lat, lon) {
+  hideErr();
+  const city = document.getElementById('city-input').value.trim();
+  if (!lat && !lon && !city) { showErr('Please enter a city name.'); return; }
+
+  document.getElementById('loading').classList.remove('hidden');
+  const res = document.getElementById('results');
+  res.classList.remove('visible'); res.classList.add('hidden');
+
+  try {
+    let location;
+    if (lat != null && lon != null) {
+      location = { name: city || 'My Location', country:'', admin1:'', latitude: lat, longitude: lon, timezone:'auto' };
+    } else {
+      location = await geocodeCity(city);
+      if (!location) { showErr(`Could not find "${city}". Try a different city name.`); return; }
+    }
+
+    const weather = await fetchWeather(location.latitude, location.longitude, location.timezone);
+    const analysed = analyse(weather, location);
+    renderAll(analysed, location, weather);
+
+  } catch (e) {
+    showErr(`Error: ${e.message}. Please check your internet connection and try again.`);
+  } finally {
+    document.getElementById('loading').classList.add('hidden');
+  }
+}
+
+// ── Geocoding ─────────────────────────────────────────────────────────────
+async function geocodeCity(city) {
+  const url = `${GEOCODE_URL}?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Geocoding failed');
+  const data = await r.json();
+  const results = data.results ?? [];
+  if (!results.length) return null;
+  const loc = results[0];
+  return {
+    name: loc.name,
+    country: loc.country ?? '',
+    admin1: loc.admin1 ?? '',
+    latitude: loc.latitude,
+    longitude: loc.longitude,
+    timezone: loc.timezone ?? 'auto',
+  };
+}
+
+// ── Weather fetch ─────────────────────────────────────────────────────────
+async function fetchWeather(lat, lon, tz) {
+  const params = new URLSearchParams({
+    latitude: lat, longitude: lon,
+    hourly: 'pressure_msl,temperature_2m,precipitation_probability,weathercode',
+    daily: 'weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+    forecast_days: 7, timezone: tz,
+    temperature_unit: 'celsius', wind_speed_unit: 'mph',
+  });
+  const r = await fetch(`${FORECAST_URL}?${params}`);
+  if (!r.ok) throw new Error('Weather API unavailable');
+  return r.json();
+}
+
+// ── Pressure analysis ─────────────────────────────────────────────────────
+
+/** Compute per-hour risk and 3h pressure changes. */
+function computeHourRisks(pressures) {
+  const n = pressures.length;
+  const risks = [], changes3h = [], changes24h = [];
+
+  for (let i = 0; i < n; i++) {
+    const c3  = pressures[Math.min(i + 3,  n - 1)] - pressures[i];
+    const c24 = pressures[Math.min(i + 24, n - 1)] - pressures[i];
+    changes3h.push(+c3.toFixed(2));
+    changes24h.push(+c24.toFixed(2));
+
+    const a3  = i + 3  < n ? Math.abs(c3)  : 0;
+    const a24 = i + 24 < n ? Math.abs(c24) : 0;
+
+    if (a3 >= THRESHOLDS[3].HIGH || a24 >= THRESHOLDS[24].HIGH)         risks.push('HIGH');
+    else if (a3 >= THRESHOLDS[3].MEDIUM || a24 >= THRESHOLDS[24].MEDIUM) risks.push('MEDIUM');
+    else                                                                   risks.push('LOW');
+  }
+  return { risks, changes3h, changes24h };
+}
+
+/** Group consecutive HIGH/MEDIUM risk hours into distinct swing events. */
+function findSwingEvents(times, pressures, risks) {
+  const n = risks.length;
+  const events = [];
+  let i = 0;
+
+  while (i < n) {
+    if (risks[i] === 'HIGH' || risks[i] === 'MEDIUM') {
+      let j = i;
+      let peakRisk = risks[i];
+      while (j < n && (risks[j] === 'HIGH' || risks[j] === 'MEDIUM')) {
+        if (RISK_SCORE[risks[j]] > RISK_SCORE[peakRisk]) peakRisk = risks[j];
+        j++;
+      }
+      const block = pressures.slice(i, j + 1);
+      const minP  = Math.min(...block);
+      const maxP  = Math.max(...block);
+      const startP = pressures[i];
+      const endP   = pressures[Math.min(j, n - 1)];
+      events.push({
+        start_time:    times[i],
+        end_time:      times[Math.min(j, n - 1)],
+        risk_level:    peakRisk,
+        magnitude:     +(maxP - minP).toFixed(1),
+        direction:     endP > startP ? 'rising' : 'falling',
+        duration_hours: j - i,
+        start_pressure: +startP.toFixed(1),
+        end_pressure:   +endP.toFixed(1),
+      });
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return events;
+}
+
+/** Day-by-day risk summary (worst risk within each calendar day). */
+function buildDailySummary(times, risks, pressures) {
+  const days = {};
+  times.forEach((t, i) => {
+    const day = t.substring(0, 10);
+    if (!days[day]) days[day] = { risk: risks[i], pressures: [pressures[i]] };
+    else {
+      if (RISK_SCORE[risks[i]] > RISK_SCORE[days[day].risk]) days[day].risk = risks[i];
+      days[day].pressures.push(pressures[i]);
+    }
+  });
+  return Object.entries(days).sort(([a],[b]) => a < b ? -1 : 1).map(([date, info]) => {
+    const ps = info.pressures;
+    return {
+      date,
+      risk: info.risk,
+      pressure_min: +Math.min(...ps).toFixed(1),
+      pressure_max: +Math.max(...ps).toFixed(1),
+      pressure_range: +(Math.max(...ps) - Math.min(...ps)).toFixed(1),
+    };
+  });
+}
+
+/** Format a future event start time as a friendly string (e.g. "monday jun 30 at 2pm"). */
+function fmtWhen(iso) {
+  try {
+    const d = new Date(iso.includes('T') ? iso : iso.replace(' ','T'));
+    return d.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' })
+      + ' at ' + d.toLocaleTimeString('en-US', { hour:'numeric', hour12:true });
+  } catch { return iso; }
+}
+
+/** Build actionable planning tips based on upcoming events. */
+function buildActionTips(events, nowMs) {
+  const tips = [];
+
+  for (const ev of events.slice(0, 10)) {
+    const evMs = new Date(ev.start_time.includes('T') ? ev.start_time : ev.start_time.replace(' ','T')).getTime();
+    const hoursUntil = (evMs - nowMs) / 3_600_000;
+    if (hoursUntil < -(ev.duration_hours)) continue; // fully past
+
+    const { risk_level: risk, direction, magnitude: mag, duration_hours: dur } = ev;
+    const when = fmtWhen(ev.start_time);
+
+    if (risk === 'HIGH') {
+      if (hoursUntil <= 2) {
+        tips.push({ urgency:'RIGHT NOW', color:'red',
+          text: `Pressure is ${direction} sharply — ${mag} hPa swing over ~${dur}h. ` +
+                `HIGH migraine risk is active right now. Have rescue medication accessible immediately and avoid all known triggers.` });
+      } else if (hoursUntil <= 12) {
+        tips.push({ urgency:`In ~${Math.round(hoursUntil)}h`, color:'red',
+          text: `HIGH-risk pressure swing approaching: ${mag} hPa ${direction} over ~${dur}h starting ${when}. ` +
+                `If your son has a preventive protocol, this is the window to start it. ` +
+                `Minimise bright screens, loud noise, strong smells, and ensure he eats a proper meal today.` });
+      } else if (hoursUntil <= 48) {
+        tips.push({ urgency:`In ~${Math.round(hoursUntil)}h`, color:'orange',
+          text: `Plan ahead for ${when}: HIGH migraine risk from a ${mag} hPa pressure ${direction}. ` +
+                `Prioritise good sleep tonight, start extra hydration now, and make sure rescue medication is stocked and accessible.` });
+      } else {
+        tips.push({ urgency:`In ~${Math.round(hoursUntil)}h`, color:'yellow',
+          text: `HIGH risk window forecast for ${when} (${mag} hPa ${direction}). ` +
+                `Good time to review medication supplies and note it in your son's migraine diary.` });
+      }
+    } else if (risk === 'MEDIUM' && hoursUntil <= 36) {
+      tips.push({ urgency:`In ~${Math.round(hoursUntil)}h`, color:'yellow',
+        text: `Moderate pressure ${direction} (${mag} hPa over ~${dur}h) starting ${when}. ` +
+              `Watch for early migraine signs: aura, light sensitivity, neck tension, mood change. ` +
+              `Stay hydrated and keep meals on schedule.` });
+    }
+  }
+
+  if (!tips.some(t => t.color === 'red' || t.color === 'orange')) {
+    tips.unshift({ urgency:'Looking good', color:'green',
+      text: `No HIGH-risk pressure swings detected in the near term. ` +
+            `Keep the daily prevention routine consistent — stability now prevents episodes later.` });
+  }
+
+  tips.push(
+    { urgency:'Every day', color:'blue',
+      text: 'Hydration: 8+ glasses of water daily. Dehydration lowers the brain\'s pressure tolerance and significantly amplifies risk during swing periods.' },
+    { urgency:'Every day', color:'blue',
+      text: 'Consistent sleep schedule: same wake/sleep time every day including weekends. Sleep disruption compounds pressure as a migraine trigger.' },
+    { urgency:'Risk days', color:'blue',
+      text: 'On HIGH/MEDIUM risk days: keep meals regular (no skipped meals), dim screens early, avoid caffeine swings, and have a quiet cool space available.' },
+    { urgency:'Tracking tip', color:'blue',
+      text: 'Keep a migraine diary noting pressure readings at onset. Over a few months this reveals your son\'s personal trigger threshold, which may differ from clinical averages.' },
+  );
+
+  return tips;
+}
+
+// ── Master analysis orchestrator ──────────────────────────────────────────
+function analyse(weather, location) {
+  const hourly    = weather.hourly ?? {};
+  const times     = hourly.time ?? [];
+  const pressures = hourly.pressure_msl ?? [];
+  const temps     = hourly.temperature_2m ?? [];
+  const wcodes    = hourly.weathercode ?? [];
+
+  const { risks, changes3h } = computeHourRisks(pressures);
+  const events  = findSwingEvents(times, pressures, risks);
+  const daily   = buildDailySummary(times, risks, pressures);
+
+  // Find the current forecast hour (first that is >= now in local time)
+  const utcOffsetS = weather.utc_offset_seconds ?? 0;
+  const nowLocal   = Date.now() + utcOffsetS * 1000; // local-time epoch ms
+  // We compare against times[] by reconstructing "local" epoch for each
+  let nowIdx = 0;
+  for (let i = 0; i < times.length; i++) {
+    const tMs = new Date(times[i].includes('T') ? times[i] : times[i].replace(' ','T')).getTime();
+    // open-meteo returns naive local times; treat them as local by adding offset
+    const tLocalMs = tMs + utcOffsetS * 1000;
+    if (tLocalMs >= nowLocal) { nowIdx = i; break; }
+  }
+
+  const curP      = +pressures[nowIdx].toFixed(1);
+  const trendDelta= +changes3h[nowIdx].toFixed(1);
+  const trend     = trendDelta > 0.5 ? 'rising' : trendDelta < -0.5 ? 'falling' : 'stable';
+  const curWcode  = wcodes[nowIdx] ?? 0;
+  const curRisk   = risks[nowIdx];
+
+  const nowMs       = new Date(times[nowIdx].includes('T') ? times[nowIdx] : times[nowIdx].replace(' ','T')).getTime();
+  const upcomingEvs = events.filter(ev => {
+    const evMs = new Date(ev.start_time.includes('T') ? ev.start_time : ev.start_time.replace(' ','T')).getTime();
+    return evMs >= nowMs;
+  });
+  const tips = buildActionTips(upcomingEvs, nowMs);
+
+  return {
+    location,
+    current: {
+      pressure:     curP,
+      temperature:  temps[nowIdx] != null ? +temps[nowIdx].toFixed(1) : null,
+      condition:    WMO[curWcode] ?? 'Unknown',
+      trend,
+      trend_delta_3h: trendDelta,
+      risk:         curRisk,
+    },
+    chart: {
+      times:     times.slice(0, 168),
+      pressures: pressures.slice(0, 168).map(p => +p.toFixed(1)),
+      risks:     risks.slice(0, 168),
+      now_idx:   nowIdx,
+    },
+    events:  upcomingEvs.slice(0, 12),
+    daily,
+    tips,
+    tz_abbr: weather.timezone_abbreviation ?? '',
+  };
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────
+
+function renderAll(data, location, _weather) {
+  // Location header
+  document.getElementById('loc-name').textContent =
+    [location.name, location.country].filter(Boolean).join(', ');
+  document.getElementById('loc-sub').textContent =
+    [location.admin1, data.tz_abbr].filter(Boolean).join(' · ');
+  document.getElementById('updated-at').textContent =
+    'Updated ' + new Date().toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12:true });
+
+  // Current conditions
+  const cur = data.current;
+  document.getElementById('cur-pres').textContent = cur.pressure ?? '—';
+  document.getElementById('cur-cond').textContent = cur.condition;
+  document.getElementById('cur-temp').textContent = cur.temperature != null ? `${cur.temperature}°C` : '—';
+
+  const trendText = cur.trend === 'rising' ? '↑ Rising' : cur.trend === 'falling' ? '↓ Falling' : '→ Stable';
+  const trendCls  = cur.trend === 'rising' ? 'text-orange-500' : cur.trend === 'falling' ? 'text-blue-500' : 'text-slate-400';
+  const dSign     = cur.trend_delta_3h > 0 ? '+' : '';
+  document.getElementById('cur-trend').innerHTML =
+    `<span class="${trendCls} font-semibold">${trendText}</span>` +
+    `<span class="text-slate-400 ml-1.5 text-xs">${dSign}${cur.trend_delta_3h} hPa / 3 h</span>`;
+
+  // Risk card
+  const risk = cur.risk;
+  const rc = document.getElementById('risk-card');
+  rc.style.cssText = `background:${riskBg(risk)};border-color:${riskHex(risk)};color:${riskHex(risk)}`;
+  document.getElementById('cur-risk').textContent = risk;
+  document.getElementById('cur-risk-note').textContent = {
+    HIGH:   'Active trigger conditions',
+    MEDIUM: 'Elevated — monitor closely',
+    LOW:    'Stable — conditions favourable',
+  }[risk] ?? '';
+
+  // Chart
+  renderChart(data.chart);
+
+  // Events
+  const evList = document.getElementById('events-list');
+  evList.innerHTML = '';
+  if (!data.events.length) {
+    evList.innerHTML = `
+      <div class="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200 text-sm text-green-800">
+        <span class="text-2xl">✅</span>
+        <span>No significant pressure swings detected in the next 7 days. Conditions look calm.</span>
+      </div>`;
+  } else {
+    data.events.forEach(ev => {
+      const icon = ev.risk_level === 'HIGH' ? '🚨' : '⚠️';
+      const dirIcon = ev.direction === 'falling' ? '↓' : '↑';
+      const div = document.createElement('div');
+      div.className = 'flex items-start gap-4 p-4 rounded-xl border-l-4';
+      div.style.cssText = `background:${riskBg(ev.risk_level)};border-left-color:${riskHex(ev.risk_level)}`;
+      div.innerHTML = `
+        <span class="text-2xl leading-none pt-0.5 select-none">${icon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2 mb-1">
+            <span class="text-xs font-bold px-2 py-0.5 rounded-full badge-${ev.risk_level}">${ev.risk_level}</span>
+            <span class="text-sm font-semibold text-slate-800">${fmtEventTime(ev.start_time)}</span>
+          </div>
+          <p class="text-sm text-slate-700">
+            Pressure <strong>${dirIcon} ${ev.direction}</strong> by
+            <strong>${ev.magnitude} hPa</strong> over ~${ev.duration_hours}h
+            <span class="text-slate-400 text-xs">(${ev.start_pressure} → ${ev.end_pressure} hPa)</span>
+          </p>
+        </div>`;
+      evList.appendChild(div);
+    });
+  }
+
+  // Daily grid
+  const dg = document.getElementById('daily-grid');
+  dg.innerHTML = '';
+  data.daily.forEach(day => {
+    const { wd, dt } = fmtDayLabel(day.date);
+    const cell = document.createElement('div');
+    cell.className = 'text-center rounded-xl p-2.5 border-2 select-none';
+    cell.style.cssText = `background:${riskBg(day.risk)};border-color:${riskBorder(day.risk)}`;
+    cell.innerHTML = `
+      <div class="text-xs text-slate-500 font-medium">${wd}</div>
+      <div class="text-sm font-bold text-slate-800 my-0.5">${dt}</div>
+      <span class="inline-block text-xs font-bold px-1.5 py-0.5 rounded-full badge-${day.risk} leading-tight">${day.risk}</span>
+      <div class="text-xs text-slate-500 mt-1">±${day.pressure_range} hPa</div>`;
+    dg.appendChild(cell);
+  });
+
+  // Tips
+  const tl = document.getElementById('tips-list');
+  tl.innerHTML = '';
+  data.tips.forEach(tip => {
+    const div = document.createElement('div');
+    div.className = `p-4 rounded-xl border-l-4 tip-${tip.color}`;
+    div.innerHTML = `
+      <span class="text-xs font-bold uppercase tracking-wider opacity-50">${tip.urgency}</span>
+      <p class="text-sm text-slate-800 mt-0.5 leading-relaxed">${tip.text}</p>`;
+    tl.appendChild(div);
+  });
+
+  // Show results with fade-in
+  const res = document.getElementById('results');
+  res.classList.remove('hidden');
+  requestAnimationFrame(() => res.classList.add('visible'));
+  res.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+// ── Chart rendering ───────────────────────────────────────────────────────
+function renderChart(cd) {
+  const ctx = document.getElementById('chart').getContext('2d');
+  if (pressureChart) { pressureChart.destroy(); pressureChart = null; }
+
+  const { times, pressures, risks, now_idx } = cd;
+
+  // Per-point style: colour by risk, emphasise "now"
+  const ptBg  = risks.map((r, i) => i === now_idx ? '#6366F1' : riskHex(r));
+  const ptBdr = risks.map((r, i) => i === now_idx ? '#fff'    : riskHex(r));
+  const ptBW  = risks.map((r, i) => i === now_idx ? 2 : 0);
+  const ptR   = risks.map((r, i) => {
+    if (i === now_idx) return 7;
+    return r === 'HIGH' ? 4 : r === 'MEDIUM' ? 3 : 1.5;
+  });
+
+  // X-axis labels: show date at midnight, '12pm' at noon, empty otherwise
+  const labels = times.map(t => {
+    const h = parseInt(t.substring(11, 13), 10);
+    if (h === 0) {
+      const d = new Date((t.includes('T') ? t : t.replace(' ','T')));
+      return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    }
+    if (h === 12) return '12pm';
+    return '';
+  });
+
+  pressureChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Pressure (hPa)',
+        data: pressures,
+        borderColor: '#818CF8',
+        borderWidth: 2,
+        pointRadius: ptR,
+        pointBackgroundColor: ptBg,
+        pointBorderColor: ptBdr,
+        pointBorderWidth: ptBW,
+        pointHoverRadius: 6,
+        tension: 0.35,
+        fill: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      scales: {
+        x: {
+          ticks: {
+            autoSkip: false,
+            maxRotation: 0,
+            font: { size: 11 },
+            color: '#94A3B8',
+            callback: (_, i) => labels[i] || null,
+          },
+          grid: { color:'#F1F5F9', drawBorder:false },
+        },
+        y: {
+          title: { display:true, text:'hPa', font:{ size:11 }, color:'#94A3B8' },
+          ticks: { font:{ size:11 }, color:'#94A3B8' },
+          grid: { color:'#F1F5F9', drawBorder:false },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(15,23,42,0.92)',
+          titleFont: { size:12, weight:'600' },
+          bodyFont: { size:12 },
+          padding: 10,
+          callbacks: {
+            title: items => fmtEventTime(times[items[0].dataIndex]),
+            label: item  => `Pressure: ${item.parsed.y} hPa`,
+            afterLabel: item => {
+              const r = risks[item.dataIndex];
+              return { HIGH:'🚨 HIGH risk', MEDIUM:'⚠️  MEDIUM risk', LOW:'✅ LOW risk' }[r] ?? '';
+            },
+          },
+        },
+      },
+    },
+  });
+}
+</script>
+</body>
+</html>
