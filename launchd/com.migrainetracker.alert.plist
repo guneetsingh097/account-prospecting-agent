@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Migraine Weather Tracker — launchd agent
+  Checks for pressure swings every 6 hours and sends macOS notifications.
+
+  Installed by setup_alerts_mac.sh — do not edit paths manually.
+  To change city: run setup_alerts_mac.sh again with the new city name.
+-->
+<plist version="1.0">
+<dict>
+
+  <key>Label</key>
+  <string>com.migrainetracker.alert</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>__SCRIPT__</string>
+  </array>
+
+  <!-- Run every 6 hours (21600 seconds) -->
+  <key>StartInterval</key>
+  <integer>21600</integer>
+
+  <!-- Also run immediately when loaded (on login / after setup) -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/migraine_tracker.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/migraine_tracker_error.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- Replace with your city, or use MIGRAINE_LAT + MIGRAINE_LON instead -->
+    <key>MIGRAINE_CITY</key>
+    <string>__CITY__</string>
+    <!-- Uncomment and set these to use coordinates instead of city name:
+    <key>MIGRAINE_LAT</key>  <string>51.5074</string>
+    <key>MIGRAINE_LON</key>  <string>-0.1278</string>
+    <key>MIGRAINE_TZ</key>   <string>Europe/London</string>
+    -->
+  </dict>
+
+  <key>KeepAlive</key>
+  <false/>
+
+</dict>
+</plist>
