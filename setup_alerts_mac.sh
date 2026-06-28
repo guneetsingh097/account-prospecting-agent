@@ -39,8 +39,14 @@ echo "  This sends proactive push notifications to your iPhone"
 echo "  when a migraine-triggering pressure swing is forecast."
 echo ""
 
-# ── Get city ─────────────────────────────────────────────────
+# ── Non-interactive mode when args are provided ───────────────
+# Arg $1 = city, $2 = ntfy topic (both optional — will prompt if missing)
 CITY="${1:-}"
+NTFY_TOPIC="${2:-}"
+NON_INTERACTIVE=false
+[[ -n "$CITY" ]] && NON_INTERACTIVE=true
+
+# ── Get city ─────────────────────────────────────────────────
 if [[ -z "$CITY" ]]; then
   read -r -p "  Enter your city name (e.g. London, Toronto, Chicago): " CITY
 fi
@@ -49,20 +55,21 @@ if [[ -z "$CITY" ]]; then
 fi
 
 # ── ntfy.sh topic for iPhone push ────────────────────────────
-echo ""
-echo "  ── iPhone push notifications ──────────────────────────"
-echo "  Uses ntfy.sh (free, no account needed)."
-echo ""
-echo "  Step 1: Install 'ntfy' on your iPhone (App Store)"
-echo "  Step 2: Choose a secret topic name — something hard to"
-echo "          guess, like:  migraine-$(openssl rand -hex 5 2>/dev/null || echo 'alerts-abc123')"
-echo ""
-read -r -p "  Enter your ntfy topic name (or press Enter to skip for now): " NTFY_TOPIC
-echo ""
+if [[ "$NON_INTERACTIVE" == "false" ]]; then
+  echo ""
+  echo "  ── iPhone push notifications ──────────────────────────"
+  echo "  Uses ntfy.sh (free, no account needed)."
+  echo ""
+  echo "  Step 1: Install 'ntfy' on your iPhone (App Store)"
+  echo "  Step 2: Choose a secret topic name — something hard to"
+  echo "          guess, like:  migraine-$(openssl rand -hex 5 2>/dev/null || echo 'alerts-abc123')"
+  echo ""
+  read -r -p "  Enter your ntfy topic name (or press Enter to skip for now): " NTFY_TOPIC
+  echo ""
+fi
 
 if [[ -z "$NTFY_TOPIC" ]]; then
-  warn "Skipping ntfy setup. Mac mini will show local notifications only."
-  warn "Re-run this script any time to add a topic."
+  [[ "$NON_INTERACTIVE" == "false" ]] && warn "Skipping ntfy setup. Mac mini will show local notifications only."
   NTFY_TOPIC=""
 fi
 
