@@ -36,14 +36,20 @@
 
   <key>EnvironmentVariables</key>
   <dict>
-    <!-- Replace with your city, or use MIGRAINE_LAT + MIGRAINE_LON instead -->
+    <!-- Location: city name, or use LAT+LON instead -->
     <key>MIGRAINE_CITY</key>
     <string>__CITY__</string>
-    <!-- Uncomment and set these to use coordinates instead of city name:
+    <!-- Uncomment to use coordinates instead of city name:
     <key>MIGRAINE_LAT</key>  <string>51.5074</string>
     <key>MIGRAINE_LON</key>  <string>-0.1278</string>
     <key>MIGRAINE_TZ</key>   <string>Europe/London</string>
     -->
+
+    <!-- ntfy.sh topic for iPhone push notifications.
+         Install "ntfy" from the App Store, then subscribe to this topic.
+         Keep this value private — anyone who knows it can send you messages. -->
+    <key>MIGRAINE_NTFY_TOPIC</key>
+    <string>__NTFY_TOPIC__</string>
   </dict>
 
   <key>KeepAlive</key>

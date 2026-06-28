@@ -2,8 +2,8 @@
 """
 Migraine Weather Alert — Mac mini proactive notifier
 ====================================================
-Run on a schedule (via launchd) to get advance macOS notifications when
-a migraine-triggering barometric pressure swing is forecast.
+Run on a schedule (via launchd) to push phone notifications when a
+migraine-triggering barometric pressure swing is forecast.
 
 Sends 3 timed alerts per HIGH event:
   • ~48h ahead  → "Plan tonight: sleep, hydrate, stock meds"
@@ -12,18 +12,23 @@ Sends 3 timed alerts per HIGH event:
 
 MEDIUM events get a single 24h-ahead heads-up.
 
-Duplicate notifications are suppressed via a state file so you never get
-spammed by the same event across multiple 6-hour checks.
+Phone notifications via ntfy.sh (free, no account needed):
+  1. Install the ntfy app on your iPhone (App Store: "ntfy")
+  2. Subscribe to your chosen topic (e.g. migraine-alerts-abc123)
+  3. Set MIGRAINE_NTFY_TOPIC to that topic in the launchd plist
+
+Also rings a sound on the Mac mini itself as a backup.
 
 Configuration (set as env vars in the launchd plist):
-  MIGRAINE_CITY    city name, e.g. "London"          ← use one of these
-  MIGRAINE_LAT     latitude  e.g. "51.5074"
-  MIGRAINE_LON     longitude e.g. "-0.1278"
-  MIGRAINE_TZ      IANA timezone (optional, default auto)
+  MIGRAINE_CITY        city name, e.g. "London"       ← location
+  MIGRAINE_LAT         latitude  e.g. "51.5074"
+  MIGRAINE_LON         longitude e.g. "-0.1278"
+  MIGRAINE_TZ          IANA timezone (optional, default auto)
+  MIGRAINE_NTFY_TOPIC  ntfy.sh topic for phone push, e.g. "migraine-alerts-abc123"
 
 Usage:
-  python3 migraine_alert.py          # normal run
-  python3 migraine_alert.py --test   # force a test notification
+  python3 migraine_alert.py          # normal scheduled run
+  python3 migraine_alert.py --test   # send a test push to your phone now
 """
 
 import os
@@ -102,20 +107,61 @@ def prune_old_keys(notified: dict, cutoff_days: int = 7) -> dict:
     return fresh
 
 
-# ── macOS notification ─────────────────────────────────────────────────────
+# ── Notifications ─────────────────────────────────────────────────────────
 
-def notify(title: str, body: str, sound: str = 'Basso'):
+# ntfy.sh priority levels: min, low, default, high, urgent
+# "urgent" breaks through iOS Do Not Disturb — use for active HIGH events
+NTFY_PRIORITY = {
+    'now':  'urgent',   # active HIGH event — override DND
+    'warn': 'high',     # HIGH event ~12h away
+    'adv':  'default',  # HIGH event ~48h away
+    'med':  'default',  # MEDIUM event
+    'test': 'low',
+}
+
+
+def notify_phone(title: str, body: str, priority: str = 'default', tags: str = 'warning'):
+    """Push to iPhone via ntfy.sh (free, no account needed)."""
+    topic = os.environ.get('MIGRAINE_NTFY_TOPIC', '').strip()
+    if not topic:
+        log.warning('MIGRAINE_NTFY_TOPIC not set — phone notifications disabled. '
+                    'See setup_alerts_mac.sh for instructions.')
+        return
+    try:
+        r = requests.post(
+            f'https://ntfy.sh/{topic}',
+            data=body.encode('utf-8'),
+            headers={
+                'Title':    title,
+                'Priority': priority,
+                'Tags':     tags,
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        log.info(f'  → Phone push sent (ntfy/{topic}): {title}')
+    except Exception as e:
+        log.error(f'ntfy.sh push failed: {e}')
+
+
+def notify_mac(title: str, body: str, sound: str = 'Basso'):
+    """Ring a sound notification on the Mac mini itself."""
     t = title.replace('"', "'")
     b = body.replace('"', "'")
     script = f'display notification "{b}" with title "{t}" sound name "{sound}"'
     try:
         subprocess.run(['osascript', '-e', script], check=True, timeout=5,
                        capture_output=True)
-        log.info(f'  → Notified: {title}')
-    except subprocess.CalledProcessError as e:
-        log.error(f'osascript error: {e.stderr.decode().strip()}')
     except Exception as e:
-        log.error(f'Notification failed: {e}')
+        log.debug(f'Mac notification failed (non-critical): {e}')
+
+
+def notify(title: str, body: str, win_key: str = 'adv'):
+    """Send alert to phone (ntfy.sh) + Mac mini (osascript)."""
+    priority = NTFY_PRIORITY.get(win_key, 'default')
+    mac_sound = 'Basso' if win_key in ('now', 'warn') else 'Glass'
+    notify_phone(title, body, priority=priority)
+    notify_mac(title, body, sound=mac_sound)
 
 
 # ── Weather data ───────────────────────────────────────────────────────────
@@ -253,7 +299,12 @@ def run(test_mode: bool = False):
     log.info(f'Checking forecast for {location_name} ({lat:.4f}, {lon:.4f}) tz={tz}')
 
     if test_mode:
-        notify('🧠 Migraine Tracker: Test', f'Alert system working for {location_name}. You are set up correctly.', 'Glass')
+        notify(
+            '🧠 Migraine Tracker: Test',
+            f'Alert system working for {location_name}. '
+            f'You will receive proactive phone alerts before pressure-triggered migraine risk windows.',
+            win_key='test',
+        )
         log.info('Test notification sent.')
         return
 
@@ -295,7 +346,7 @@ def run(test_mode: bool = False):
                     continue
 
                 title, body = build_message(ev, win_key, hours_until, location_name)
-                notify(title, body)
+                notify(title, body, win_key=win_key)
                 notified[dedup_key] = datetime.now().isoformat()
                 sent += 1
 

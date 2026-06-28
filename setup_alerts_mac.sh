@@ -35,6 +35,9 @@ echo ""
 echo "  🧠 Migraine Weather Alert — Mac mini Setup"
 echo "  ─────────────────────────────────────────────"
 echo ""
+echo "  This sends proactive push notifications to your iPhone"
+echo "  when a migraine-triggering pressure swing is forecast."
+echo ""
 
 # ── Get city ─────────────────────────────────────────────────
 CITY="${1:-}"
@@ -44,7 +47,24 @@ fi
 if [[ -z "$CITY" ]]; then
   err "City name required."; exit 1
 fi
+
+# ── ntfy.sh topic for iPhone push ────────────────────────────
 echo ""
+echo "  ── iPhone push notifications ──────────────────────────"
+echo "  Uses ntfy.sh (free, no account needed)."
+echo ""
+echo "  Step 1: Install 'ntfy' on your iPhone (App Store)"
+echo "  Step 2: Choose a secret topic name — something hard to"
+echo "          guess, like:  migraine-$(openssl rand -hex 5 2>/dev/null || echo 'alerts-abc123')"
+echo ""
+read -r -p "  Enter your ntfy topic name (or press Enter to skip for now): " NTFY_TOPIC
+echo ""
+
+if [[ -z "$NTFY_TOPIC" ]]; then
+  warn "Skipping ntfy setup. Mac mini will show local notifications only."
+  warn "Re-run this script any time to add a topic."
+  NTFY_TOPIC=""
+fi
 
 # ── Find Python 3 ────────────────────────────────────────────
 PYTHON=""
@@ -90,6 +110,7 @@ sed \
   -e "s|__SCRIPT__|$ALERT_SCRIPT|g" \
   -e "s|__HOME__|$HOME|g" \
   -e "s|__CITY__|$CITY|g" \
+  -e "s|__NTFY_TOPIC__|$NTFY_TOPIC|g" \
   "$TEMPLATE" > "$AGENT_PLIST"
 ok "Plist written: $AGENT_PLIST"
 
@@ -102,18 +123,28 @@ ok "launchd agent loaded (com.migrainetracker.alert)"
 echo ""
 echo "  ─────────────────────────────────────────────"
 ok "Setup complete! Checking every 6 hours for: ${YELLOW}${CITY}${NC}"
+
+if [[ -n "$NTFY_TOPIC" ]]; then
+  echo ""
+  echo "  ── Finish iPhone setup ─────────────────────────────────"
+  echo "  1. Open the ntfy app on your iPhone"
+  echo "  2. Tap ＋ and subscribe to topic: ${YELLOW}${NTFY_TOPIC}${NC}"
+  echo "  3. Allow notifications when prompted"
+  echo "  That's it — you'll receive phone alerts automatically."
+fi
+
 echo ""
 echo "  Notification schedule (per HIGH-risk event):"
-echo "    📋  ~48h ahead  — plan sleep + hydration + med stock"
-echo "    ⚠️   ~12h ahead  — start preventive steps"
-echo "    🚨   Active now  — rescue medication alert"
-echo "    💛  MEDIUM risk ~24h ahead"
+echo "    📋  ~48h ahead  — plan tonight: sleep, hydrate, stock meds"
+echo "    ⚠️   ~12h ahead  — start preventive protocol (breaks DND if urgent)"
+echo "    🚨   Active now  — rescue medication alert (overrides Do Not Disturb)"
+echo "    💛   MEDIUM risk ~24h ahead"
 echo ""
 echo "  Quick commands:"
-echo "    Test alert now:   ${YELLOW}python3 $ALERT_SCRIPT --test${NC}"
-echo "    Run check now:    ${YELLOW}python3 $ALERT_SCRIPT${NC}"
-echo "    View logs:        ${YELLOW}tail -f ~/Library/Logs/migraine_tracker.log${NC}"
-echo "    Uninstall:        ${YELLOW}launchctl unload $AGENT_PLIST && rm $AGENT_PLIST${NC}"
+echo "    Test push to phone:  ${YELLOW}python3 $ALERT_SCRIPT --test${NC}"
+echo "    Run check now:       ${YELLOW}python3 $ALERT_SCRIPT${NC}"
+echo "    View logs:           ${YELLOW}tail -f ~/Library/Logs/migraine_tracker.log${NC}"
+echo "    Uninstall:           ${YELLOW}launchctl unload $AGENT_PLIST && rm $AGENT_PLIST${NC}"
 echo ""
 
 # ── Run a test notification right now ────────────────────────
